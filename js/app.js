@@ -62,12 +62,12 @@ function goTo(page) {
   }
 
   // Renderizar conteúdo
-  if (page === "cards") renderCards();
-  if (page === "accounts") renderAccounts();
-  if (page === "calendar") renderCalendar();
-  if (page === "investments") renderInvestments();
-  if (page === "goals") renderGoals();
-  if (page === "budget") updateBudget();
+  if (page === "cards") { renderCards(); renderInsightCards(); }
+  if (page === "accounts") { renderAccounts(); renderInsightAccounts(); }
+  if (page === "calendar") { renderCalendar(); renderInsightCalendar(); }
+  if (page === "investments") { renderInvestments(); renderInsightInvestments(); }
+  if (page === "goals") { renderGoals(); renderInsightGoals(); }
+  if (page === "budget") { updateBudget(); renderInsightBudget(); }
   if (page === "overview") renderOverview();
 }
 
@@ -806,6 +806,191 @@ function exportData() {
   a.href = url;
   a.download = `familia-feitoza-${new Date().getTime()}.json`;
   a.click();
+}
+
+// ========== FLOATING ACTION BUTTON ==========
+function openFab() {
+  const modal = document.getElementById("fab-modal");
+  modal.classList.add("open");
+  // Preencher data de hoje
+  const today = new Date().toISOString().split("T")[0];
+  document.getElementById("fab-date").value = today;
+  document.getElementById("fab-title").focus();
+}
+
+function closeFab() {
+  document.getElementById("fab-modal").classList.remove("open");
+  document.getElementById("fab-title").value = "";
+  document.getElementById("fab-amount").value = "";
+  document.getElementById("fab-date").value = "";
+}
+
+function closeFabOnOverlay(e) {
+  if (e.target === document.getElementById("fab-modal")) closeFab();
+}
+
+function saveFab() {
+  const title = document.getElementById("fab-title").value.trim();
+  const amount = parseFloat(document.getElementById("fab-amount").value) || 0;
+  const type = document.getElementById("fab-type").value;
+  const date = document.getElementById("fab-date").value;
+
+  if (!title || amount <= 0 || !date) return;
+
+  if (!db.calendar) db.calendar = [];
+  db.calendar.push({
+    id: Date.now(),
+    title,
+    date,
+    amount,
+    type,
+    createdAt: new Date().toISOString()
+  });
+
+  persist();
+  saveToSheets(db);
+  closeFab();
+  showToast("✅ Salvo!");
+
+  // Atualiza a seção ativa se for calendário ou overview
+  const calSec = document.getElementById("sec-calendar");
+  if (calSec && calSec.classList.contains("on")) renderCalendar();
+  const ovSec = document.getElementById("sec-overview");
+  if (ovSec && ovSec.classList.contains("on")) renderOverview();
+}
+
+// ESC fecha o modal
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeFab();
+});
+
+// ========== TOAST ==========
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  if (!t) return;
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+// ========== INSIGHTS ==========
+function insightHTML(items) {
+  return `<div class="insight-strip">${items.map(i => `
+    <div class="insight-item">
+      <div class="insight-label">${i.label}</div>
+      <div class="insight-value" style="color:${i.color || "var(--text)"}">${i.value}</div>
+      ${i.sub ? `<div class="insight-sub">${i.sub}</div>` : ""}
+    </div>`).join("")}</div>`;
+}
+
+function renderInsightCards() {
+  const el = document.getElementById("insight-cards");
+  if (!el) return;
+  const cards = db.cards || [];
+  if (!cards.length) { el.innerHTML = ""; return; }
+  const totalLimit = cards.reduce((a, c) => a + (c.limit || 0), 0);
+  const totalUsed = cards.reduce((a, c) => a + (c.used || 0), 0);
+  const available = totalLimit - totalUsed;
+  const pct = totalLimit > 0 ? ((totalUsed / totalLimit) * 100).toFixed(0) : 0;
+  const color = pct > 80 ? "var(--red)" : pct > 50 ? "var(--amber)" : "var(--green)";
+  el.innerHTML = insightHTML([
+    { label: "Limite Total", value: fmt(totalLimit), color: "var(--text)" },
+    { label: "Utilizado", value: fmt(totalUsed), color, sub: pct + "% do limite" },
+    { label: "Disponível", value: fmt(available), color: "var(--green)" },
+    { label: "Cartões", value: cards.length, sub: "cadastrados" }
+  ]);
+}
+
+function renderInsightCalendar() {
+  const el = document.getElementById("insight-calendar");
+  if (!el) return;
+  const today = new Date();
+  const m = today.getMonth(), y = today.getFullYear();
+  const events = db.calendar || [];
+  const receitas = events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Receita"; }).reduce((a,e)=>a+(e.amount||0),0);
+  const despesas = events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Despesa"; }).reduce((a,e)=>a+(e.amount||0),0);
+  const saldo = receitas - despesas;
+  el.innerHTML = insightHTML([
+    { label: "Receitas do Mês", value: fmt(receitas), color: "var(--green)" },
+    { label: "Despesas do Mês", value: fmt(despesas), color: "var(--red)" },
+    { label: "Saldo do Mês", value: fmt(saldo), color: saldo >= 0 ? "var(--green)" : "var(--red)" },
+    { label: "Eventos", value: events.length, sub: "no total" }
+  ]);
+}
+
+function renderInsightAccounts() {
+  const el = document.getElementById("insight-accounts");
+  if (!el) return;
+  const accounts = db.accounts || [];
+  if (!accounts.length) { el.innerHTML = ""; return; }
+  const total = accounts.reduce((a, c) => a + (c.balance || 0), 0);
+  const maior = accounts.reduce((a, c) => c.balance > a.balance ? c : a, accounts[0]);
+  el.innerHTML = insightHTML([
+    { label: "Patrimônio Total", value: fmt(total), color: "var(--orange)" },
+    { label: "Maior Conta", value: maior.name, sub: fmt(maior.balance) },
+    { label: "Contas", value: accounts.length, sub: "cadastradas" }
+  ]);
+}
+
+function renderInsightInvestments() {
+  const el = document.getElementById("insight-investments");
+  if (!el) return;
+  const invs = db.investments || [];
+  if (!invs.length) { el.innerHTML = ""; return; }
+  const totalInicial = invs.reduce((a, i) => a + (i.initial || 0), 0);
+  const totalAtual = invs.reduce((a, i) => a + (i.current || 0), 0);
+  const rentTotal = totalInicial > 0 ? (((totalAtual - totalInicial) / totalInicial) * 100).toFixed(1) : 0;
+  const rentColor = totalAtual >= totalInicial ? "var(--green)" : "var(--red)";
+  const melhor = invs.reduce((a, i) => {
+    const ra = ((a.current - a.initial) / a.initial);
+    const ri = ((i.current - i.initial) / i.initial);
+    return ri > ra ? i : a;
+  }, invs[0]);
+  el.innerHTML = insightHTML([
+    { label: "Total Investido", value: fmt(totalInicial), color: "var(--text)" },
+    { label: "Valor Atual", value: fmt(totalAtual), color: rentColor },
+    { label: "Rentabilidade", value: (totalAtual >= totalInicial ? "+" : "") + rentTotal + "%", color: rentColor },
+    { label: "Melhor Ativo", value: melhor.name, sub: (((melhor.current - melhor.initial) / melhor.initial) * 100).toFixed(1) + "%" }
+  ]);
+}
+
+function renderInsightGoals() {
+  const el = document.getElementById("insight-goals");
+  if (!el) return;
+  const goals = db.goals || [];
+  if (!goals.length) { el.innerHTML = ""; return; }
+  const today = new Date();
+  const noPrazo = goals.filter(g => !g.deadline || new Date(g.deadline) >= today).length;
+  const atrasadas = goals.filter(g => g.deadline && new Date(g.deadline) < today && g.current < g.target).length;
+  const concluidas = goals.filter(g => g.current >= g.target).length;
+  el.innerHTML = insightHTML([
+    { label: "Total de Metas", value: goals.length, color: "var(--text)" },
+    { label: "No Prazo", value: noPrazo, color: "var(--green)" },
+    { label: "Atrasadas", value: atrasadas, color: atrasadas > 0 ? "var(--red)" : "var(--green)" },
+    { label: "Concluídas", value: concluidas, color: "var(--orange)" }
+  ]);
+}
+
+function renderInsightBudget() {
+  const el = document.getElementById("insight-budget");
+  if (!el) return;
+  const income = db.income || 0;
+  if (!income) { el.innerHTML = ""; return; }
+  const despesas = (db.calendar || [])
+    .filter(e => { const d = new Date(e.date); return d.getMonth()===new Date().getMonth() && e.type==="Despesa"; })
+    .reduce((a, e) => a + (e.amount || 0), 0);
+  const needs = income * 0.5;
+  const wants = income * 0.3;
+  const invest = income * 0.2;
+  const dentroNecessidades = despesas <= needs;
+  const sobra = income - despesas;
+  el.innerHTML = insightHTML([
+    { label: "Renda Mensal", value: fmt(income), color: "var(--text)" },
+    { label: "Necessidades (50%)", value: fmt(needs), color: "var(--blue)" },
+    { label: "Desejos (30%)", value: fmt(wants), color: "var(--orange)" },
+    { label: "Investimentos (20%)", value: fmt(invest), color: "var(--green)" },
+    { label: "Saldo Livre", value: fmt(sobra), color: sobra >= 0 ? "var(--green)" : "var(--red)", sub: dentroNecessidades ? "✅ Dentro do 50%" : "⚠️ Acima do 50%" }
+  ]);
 }
 
 // ========== INIT ==========
