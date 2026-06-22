@@ -50,50 +50,80 @@
     <div class="page">
       <!-- OVERVIEW -->
       <section id="sec-overview" class="sec on">
-        <div class="hero">
+
+        <!-- HERO: Saudação + Saúde Financeira -->
+        <div class="hero" style="margin-bottom:20px">
           <div class="hero-tag">Dashboard Financeiro</div>
-          <div class="hero-title">Bem-vindo à Familia Feitoza</div>
-          <div class="hero-sub">Controle completo das suas finanças em um lugar</div>
-          <div class="hero-grid">
-            <div class="hero-card">
-              <div class="hero-card-label">Patrimônio Total</div>
-              <div class="hero-card-value" id="total-net">R$ 0</div>
-              <div class="hero-card-sub">Atualizado agora</div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+            <div>
+              <div class="hero-title" id="hero-greeting">Olá, Família Feitoza 👋</div>
+              <div class="hero-sub" id="hero-date"></div>
             </div>
-            <div class="hero-card">
-              <div class="hero-card-label">Receita Mensal</div>
-              <div class="hero-card-value" id="monthly-income">R$ 0</div>
-              <div class="hero-card-sub">Mês atual</div>
-            </div>
-            <div class="hero-card">
-              <div class="hero-card-label">Despesas Mês</div>
-              <div class="hero-card-value" id="monthly-expenses">R$ 0</div>
-              <div class="hero-card-sub">Até hoje</div>
-            </div>
-            <div class="hero-card">
-              <div class="hero-card-label">Saldo Mês</div>
-              <div class="hero-card-value" id="monthly-balance">R$ 0</div>
-              <div class="hero-card-sub">Receita - Despesa</div>
+            <div id="health-score-box" style="background:var(--glass);border:1px solid var(--glass-border);border-radius:14px;padding:14px 20px;text-align:center;min-width:120px">
+              <div style="font-size:10px;color:var(--text4);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:6px">Saúde Financeira</div>
+              <div id="health-score" style="font-size:28px;font-weight:900;color:var(--green)">--</div>
+              <div id="health-label" style="font-size:11px;color:var(--text3);margin-top:2px">Calculando...</div>
             </div>
           </div>
         </div>
 
+        <!-- KPIs PRINCIPAIS -->
+        <div class="hero-grid" style="margin-bottom:20px">
+          <div class="hero-card" id="balance-card" style="border-color:rgba(34,197,94,0.2);position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);opacity:0.6"></div>
+            <div class="hero-card-label">Saldo do Mês</div>
+            <div class="hero-card-value" id="monthly-balance" style="color:var(--green)">R$ 0</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:8px">
+              <div style="flex:1;height:4px;background:var(--surface3);border-radius:99px;overflow:hidden">
+                <div id="balance-bar" style="height:100%;background:var(--green);border-radius:99px;width:0%;transition:width 0.7s"></div>
+              </div>
+              <span id="balance-pct" style="font-size:10px;color:var(--text4);font-weight:700">0%</span>
+            </div>
+            <div class="hero-card-sub" id="balance-sub">Receita - Despesas</div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-card-label">Receita Mensal</div>
+            <div class="hero-card-value" id="monthly-income">R$ 0</div>
+            <div style="font-size:11px;color:var(--text4);margin-top:8px" id="income-sub">Mês atual</div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-card-label">Despesas do Mês</div>
+            <div class="hero-card-value" id="monthly-expenses" style="color:var(--red)">R$ 0</div>
+            <div style="font-size:11px;color:var(--text4);margin-top:8px">Até hoje</div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-card-label">Patrimônio Total</div>
+            <div class="hero-card-value" id="total-net" style="color:var(--orange)">R$ 0</div>
+            <div style="font-size:11px;color:var(--text4);margin-top:8px">Contas + Investimentos</div>
+          </div>
+        </div>
+
+        <!-- LINHA 2: Próximos Eventos + Metas -->
+        <div class="g2" style="margin-bottom:20px">
+          <div class="card">
+            <div class="slbl">Próximos Eventos</div>
+            <div id="upcoming-expenses"></div>
+          </div>
+          <div class="card">
+            <div class="slbl">Progresso das Metas</div>
+            <div id="overview-goals"></div>
+          </div>
+        </div>
+
+        <!-- LINHA 3: Patrimônio + Budget -->
         <div class="g2">
           <div class="card">
-            <div class="slbl">Evolução Mensal (Últimos 6 meses)</div>
-            <canvas id="chart-evolution"></canvas>
+            <div class="slbl">Composição do Patrimônio</div>
+            <canvas id="chart-composition" style="max-height:200px"></canvas>
           </div>
           <div class="card">
-            <div class="slbl">Composição do Patrimônio</div>
-            <canvas id="chart-composition"></canvas>
+            <div class="slbl">Budget 50/30/20</div>
+            <div id="overview-budget"></div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="slbl">Próximas Despesas (Calendário)</div>
-          <div id="upcoming-expenses"></div>
-        </div>
       </section>
+
 
       <!-- CARTÕES DE CRÉDITO -->
       <section id="sec-cards" class="sec">

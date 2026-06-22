@@ -73,18 +73,25 @@ function goTo(page) {
 
 // ========== OVERVIEW ==========
 function renderOverview() {
-  // Total patrimônio
-  const totalAccounts = (db.accounts || []).reduce((a, c) => a + (c.balance || 0), 0);
-  const totalInvestments = (db.investments || []).reduce((a, c) => a + (c.current || 0), 0);
-  const netWorth = totalAccounts + totalInvestments;
-
-  document.getElementById("total-net").textContent = fmt(netWorth);
-
-  // Receita e despesas do mês
+  // Data e saudação
   const today = new Date();
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
+  // Data formatada
+  const dateEl = document.getElementById("hero-date");
+  if (dateEl) {
+    dateEl.textContent = today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  }
+
+  // Patrimônio total
+  const totalAccounts = (db.accounts || []).reduce((a, c) => a + (c.balance || 0), 0);
+  const totalInvestments = (db.investments || []).reduce((a, c) => a + (c.current || 0), 0);
+  const netWorth = totalAccounts + totalInvestments;
+  const totalNetEl = document.getElementById("total-net");
+  if (totalNetEl) totalNetEl.textContent = fmt(netWorth);
+
+  // Receita e despesas do mês
   const monthlyIncome = (db.calendar || [])
     .filter(e => {
       const d = new Date(e.date);
@@ -99,15 +106,148 @@ function renderOverview() {
     })
     .reduce((a, e) => a + (e.amount || 0), 0);
 
-  document.getElementById("monthly-income").textContent = fmt(monthlyIncome || db.income);
-  document.getElementById("monthly-expenses").textContent = fmt(monthlyExpenses);
-  document.getElementById("monthly-balance").textContent = fmt((monthlyIncome || db.income) - monthlyExpenses);
+  const income = monthlyIncome || db.income || 0;
+  const balance = income - monthlyExpenses;
+  const balancePct = income > 0 ? Math.min(100, Math.round((balance / income) * 100)) : 0;
 
-  // Próximas despesas
+  // Atualizar KPIs
+  const incomeEl = document.getElementById("monthly-income");
+  if (incomeEl) incomeEl.textContent = fmt(income);
+
+  const expensesEl = document.getElementById("monthly-expenses");
+  if (expensesEl) expensesEl.textContent = fmt(monthlyExpenses);
+
+  const balanceEl = document.getElementById("monthly-balance");
+  if (balanceEl) {
+    balanceEl.textContent = fmt(balance);
+    balanceEl.style.color = balance >= 0 ? "var(--green)" : "var(--red)";
+  }
+
+  // Barra de saldo
+  const balanceBar = document.getElementById("balance-bar");
+  if (balanceBar) {
+    balanceBar.style.width = Math.max(0, balancePct) + "%";
+    balanceBar.style.background = balance >= 0 ? "var(--green)" : "var(--red)";
+  }
+  const balancePctEl = document.getElementById("balance-pct");
+  if (balancePctEl) balancePctEl.textContent = balancePct + "% salvo";
+
+  const balanceSub = document.getElementById("balance-sub");
+  if (balanceSub) {
+    balanceSub.textContent = balance >= 0
+      ? `Você economizou ${fmt(balance)} este mês ✅`
+      : `Deficit de ${fmt(Math.abs(balance))} este mês ⚠️`;
+  }
+
+  // Score de saúde financeira (0-100)
+  let score = 0;
+  if (income > 0) score += 20;
+  if (balance > 0) score += 20;
+  if (balancePct >= 20) score += 20;
+  if ((db.goals || []).length > 0) score += 20;
+  if (netWorth > 0) score += 20;
+
+  const healthEl = document.getElementById("health-score");
+  const healthLabel = document.getElementById("health-label");
+  const healthBox = document.getElementById("health-score-box");
+  if (healthEl) {
+    healthEl.textContent = score;
+    if (score >= 80) {
+      healthEl.style.color = "var(--green)";
+      if (healthLabel) healthLabel.textContent = "Excelente! 🚀";
+      if (healthBox) healthBox.style.borderColor = "rgba(34,197,94,0.3)";
+    } else if (score >= 60) {
+      healthEl.style.color = "var(--amber)";
+      if (healthLabel) healthLabel.textContent = "Bom! Continue 👍";
+      if (healthBox) healthBox.style.borderColor = "rgba(245,158,11,0.3)";
+    } else if (score >= 40) {
+      healthEl.style.color = "var(--orange)";
+      if (healthLabel) healthLabel.textContent = "Atenção ⚠️";
+      if (healthBox) healthBox.style.borderColor = "rgba(249,115,22,0.3)";
+    } else {
+      healthEl.style.color = "var(--red)";
+      if (healthLabel) healthLabel.textContent = "Precisa melhorar";
+      if (healthBox) healthBox.style.borderColor = "rgba(239,68,68,0.3)";
+    }
+  }
+
+  // Próximos eventos
   renderUpcomingExpenses();
 
-  // Charts
+  // Metas na overview
+  renderOverviewGoals();
+
+  // Budget na overview
+  renderOverviewBudget();
+
+  // Chart patrimônio
   renderOverviewCharts();
+}
+
+// ========== METAS NA OVERVIEW ==========
+function renderOverviewGoals() {
+  const container = document.getElementById("overview-goals");
+  if (!container) return;
+
+  const goals = db.goals || [];
+  if (!goals.length) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text4);font-size:13px">Nenhuma meta cadastrada ainda</div>`;
+    return;
+  }
+
+  container.innerHTML = goals.slice(0, 3).map(g => {
+    const pct = Math.min(100, Math.round((g.current / g.target) * 100));
+    const color = pct >= 80 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--orange)";
+    return `
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:13px;font-weight:600">${g.name}</span>
+          <span style="font-size:12px;color:${color};font-weight:700">${pct}%</span>
+        </div>
+        <div style="height:6px;background:var(--surface3);border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:99px;transition:width 0.7s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <span style="font-size:11px;color:var(--text4)">${fmt(g.current)}</span>
+          <span style="font-size:11px;color:var(--text4)">${fmt(g.target)}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ========== BUDGET NA OVERVIEW ==========
+function renderOverviewBudget() {
+  const container = document.getElementById("overview-budget");
+  if (!container) return;
+
+  const income = db.income || 0;
+  if (income <= 0) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text4);font-size:13px">Configure sua renda no Budget 50/30/20</div>`;
+    return;
+  }
+
+  const needs = income * 0.5;
+  const wants = income * 0.3;
+  const invest = income * 0.2;
+
+  const items = [
+    { label: "Necessidades (50%)", value: needs, color: "var(--blue)" },
+    { label: "Desejos (30%)", value: wants, color: "var(--orange)" },
+    { label: "Investimentos (20%)", value: invest, color: "var(--green)" },
+  ];
+
+  container.innerHTML = items.map(item => `
+    <div style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:12px;color:var(--text3)">${item.label}</span>
+        <span style="font-size:13px;font-weight:700;color:${item.color}">${fmt(item.value)}</span>
+      </div>
+      <div style="height:6px;background:var(--surface3);border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:100%;background:${item.color};border-radius:99px;opacity:0.7"></div>
+      </div>
+    </div>
+  `).join("");
 }
 
 function renderUpcomingExpenses() {
@@ -138,56 +278,7 @@ function renderUpcomingExpenses() {
 }
 
 function renderOverviewCharts() {
-  // Gráfico de evolução (últimos 6 meses)
-  const chartCtx = document.getElementById("chart-evolution");
-  if (chartCtx && chartCtx.chart) chartCtx.chart.destroy();
-
-  const months = [];
-  const balances = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    months.push(d.toLocaleDateString("pt-BR", { month: "short" }));
-    balances.push(Math.random() * 10000); // Simulado por agora
-  }
-
-  if (chartCtx) {
-    chartCtx.chart = new Chart(chartCtx, {
-      type: "line",
-      data: {
-        labels: months,
-        datasets: [
-          {
-            label: "Saldo",
-            data: balances,
-            borderColor: "#f97316",
-            backgroundColor: "rgba(249, 115, 22, 0.1)",
-            tension: 0.4,
-            fill: true,
-            pointBackgroundColor: "#f97316",
-            pointBorderColor: "#fff"
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          y: {
-            grid: { color: "rgba(255, 255, 255, 0.05)" },
-            ticks: { color: "var(--text4)" }
-          },
-          x: {
-            grid: { display: false },
-            ticks: { color: "var(--text4)" }
-          }
-        }
-      }
-    });
-  }
-
-  // Gráfico de composição (pizza)
+  // Gráfico de composição do patrimônio (doughnut)
   const compCtx = document.getElementById("chart-composition");
   if (compCtx && compCtx.chart) compCtx.chart.destroy();
 
@@ -195,26 +286,26 @@ function renderOverviewCharts() {
   const totalInvestments = (db.investments || []).reduce((a, c) => a + (c.current || 0), 0);
 
   if (compCtx) {
+    const hasData = totalAccounts > 0 || totalInvestments > 0;
     compCtx.chart = new Chart(compCtx, {
       type: "doughnut",
       data: {
         labels: ["Contas Bancárias", "Investimentos"],
-        datasets: [
-          {
-            data: [totalAccounts, totalInvestments],
-            backgroundColor: ["#3b82f6", "#f97316"],
-            borderColor: "#111113",
-            borderWidth: 2
-          }
-        ]
+        datasets: [{
+          data: hasData ? [totalAccounts, totalInvestments] : [1, 0],
+          backgroundColor: hasData ? ["#3b82f6", "#f97316"] : ["#333338", "#333338"],
+          borderColor: "#111113",
+          borderWidth: 2
+        }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: true,
+        cutout: "65%",
         plugins: {
           legend: {
             position: "bottom",
-            labels: { color: "var(--text)" }
+            labels: { color: "#a1a1aa", font: { size: 11 }, padding: 16 }
           }
         }
       }
