@@ -248,6 +248,7 @@ function addCard() {
   document.getElementById("card-bank").value = "";
 
   persist();
+  saveToSheets(db);
   renderCards();
 }
 
@@ -323,6 +324,7 @@ function addCalendarEvent() {
   document.getElementById("evt-amount").value = "";
 
   persist();
+  saveToSheets(db);
   renderCalendar();
 }
 
@@ -393,6 +395,7 @@ function addAccount() {
   document.getElementById("a-bank").value = "";
 
   persist();
+  saveToSheets(db);
   renderAccounts();
 }
 
@@ -479,6 +482,7 @@ function addInvestment() {
   document.getElementById("inv-current").value = "";
 
   persist();
+  saveToSheets(db);
   renderInvestments();
 }
 
@@ -557,6 +561,7 @@ function addGoal() {
   document.getElementById("goal-deadline").value = "";
 
   persist();
+  saveToSheets(db);
   renderGoals();
 }
 
@@ -641,6 +646,7 @@ function updateBudget() {
   }
 
   persist();
+  saveToSheets(db);
 }
 
 // ========== ONBOARDING ==========
