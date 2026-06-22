@@ -364,7 +364,10 @@ function renderCards() {
             <div class="card-name">${c.name}</div>
             <div class="card-bank">${c.bank}</div>
           </div>
-          <button class="btn-d" onclick="removeCard(${c.id})">✕</button>
+          <div style="display:flex;gap:4px">
+            <button class="btn-edit" onclick="openEditModal('card',${c.id})">✏️</button>
+            <button class="btn-d" onclick="removeCard(${c.id})">✕</button>
+          </div>
         </div>
         <div class="card-limit">
           <div class="card-limit-label">Limite usado</div>
@@ -397,6 +400,8 @@ function addCalendarEvent() {
   const date = document.getElementById("evt-date").value;
   const amount = parseFloat(document.getElementById("evt-amount").value) || 0;
   const type = document.getElementById("evt-type").value;
+  const category = document.getElementById("evt-category").value || "Outros";
+  const recurring = document.getElementById("evt-recurring").checked;
 
   if (!title || !date || amount <= 0) return alert("Preencha todos os campos");
 
@@ -407,16 +412,20 @@ function addCalendarEvent() {
     date,
     amount,
     type,
+    category,
+    recurring,
     createdAt: new Date().toISOString()
   });
 
   document.getElementById("evt-title").value = "";
   document.getElementById("evt-date").value = "";
   document.getElementById("evt-amount").value = "";
+  document.getElementById("evt-recurring").checked = false;
 
   persist();
   saveToSheets(db);
   renderCalendar();
+  renderInsightCalendar();
 }
 
 function renderCalendar() {
@@ -434,6 +443,8 @@ function renderCalendar() {
     .map(e => {
       const icon = e.type === "Despesa" ? "💸" : e.type === "Receita" ? "💰" : "🎯";
       const color = e.type === "Despesa" ? "var(--red)" : e.type === "Receita" ? "var(--green)" : "var(--orange)";
+      const catBadge = e.category ? `<span class="cat-badge">${e.category}</span>` : "";
+      const recBadge = e.recurring ? `<span style="color:var(--orange);font-size:10px;font-weight:700">🔄 recorrente</span>` : "";
 
       return `
       <div class="row">
@@ -441,12 +452,17 @@ function renderCalendar() {
           <span style="font-size:18px">${icon}</span>
           <div>
             <div style="font-weight:600">${e.title}</div>
-            <div style="font-size:11px;color:var(--text4)">${fmtDate(e.date)}</div>
+            <div style="font-size:11px;color:var(--text4);display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap">
+              ${fmtDate(e.date)} ${catBadge} ${recBadge}
+            </div>
           </div>
         </div>
-        <div>
-          <div style="font-weight:700;color:${color};margin-bottom:4px">${fmt(e.amount)}</div>
-          <button class="btn-d" onclick="removeCalendarEvent(${e.id})">✕</button>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <div style="font-weight:700;color:${color}">${fmt(e.amount)}</div>
+          <div style="display:flex;gap:4px">
+            <button class="btn-edit" onclick="openEditModal('calendar',${e.id})">✏️</button>
+            <button class="btn-d" onclick="removeCalendarEvent(${e.id})">✕</button>
+          </div>
         </div>
       </div>
     `;
@@ -539,8 +555,9 @@ function renderAccounts() {
         <div class="card-name">${a.name}</div>
         <div class="card-bank" style="margin-bottom:12px">${typeLabels[a.type] || a.type}</div>
         <div style="font-size:18px;font-weight:800;color:${a.balance >= 0 ? "var(--green)" : "var(--red)"};margin-bottom:12px">${fmt(a.balance)}</div>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:8px">
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px">
           <button class="btn-s" onclick="adjustBalance(${a.id})">💰 Ajustar</button>
+          <button class="btn-edit" onclick="openEditModal('account',${a.id})">✏️</button>
           <button class="btn-d" onclick="removeAccount(${a.id})">✕</button>
         </div>
       </div>
@@ -613,7 +630,10 @@ function renderInvestments() {
         <div class="inv-return" style="background:${gain >= 0 ? "rgba(34, 197, 94, 0.1)" : "rgba(239, 68, 68, 0.1)"}; color:${gainColor}">
           ${gain >= 0 ? "+" : ""}${fmt(gain)} (${gainPercent}%)
         </div>
-        <button class="btn-d" style="width:100%;margin-top:12px" onclick="removeInvestment(${inv.id})">Remover</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+          <button class="btn-edit full" onclick="openEditModal('investment',${inv.id})">✏️ Editar</button>
+          <button class="btn-d" style="width:100%" onclick="removeInvestment(${inv.id})">Remover</button>
+        </div>
       </div>
     `;
     })
@@ -684,7 +704,10 @@ function renderGoals() {
         </div>
         <div class="goal-values">
           <div><span class="goal-value">${fmt(g.current)}</span> de <span class="goal-value">${fmt(g.target)}</span></div>
-          <button class="btn-d" onclick="removeGoal(${g.id})">✕</button>
+          <div style="display:flex;gap:4px">
+            <button class="btn-edit" onclick="openEditModal('goal',${g.id})">✏️</button>
+            <button class="btn-d" onclick="removeGoal(${g.id})">✕</button>
+          </div>
         </div>
       </div>
     `;
@@ -834,6 +857,8 @@ function saveFab() {
   const amount = parseFloat(document.getElementById("fab-amount").value) || 0;
   const type = document.getElementById("fab-type").value;
   const date = document.getElementById("fab-date").value;
+  const category = document.getElementById("fab-category").value || "Outros";
+  const recurring = document.getElementById("fab-recurring").checked;
 
   if (!title || amount <= 0 || !date) return;
 
@@ -844,6 +869,8 @@ function saveFab() {
     date,
     amount,
     type,
+    category,
+    recurring,
     createdAt: new Date().toISOString()
   });
 
@@ -854,14 +881,14 @@ function saveFab() {
 
   // Atualiza a seção ativa se for calendário ou overview
   const calSec = document.getElementById("sec-calendar");
-  if (calSec && calSec.classList.contains("on")) renderCalendar();
+  if (calSec && calSec.classList.contains("on")) { renderCalendar(); renderInsightCalendar(); }
   const ovSec = document.getElementById("sec-overview");
   if (ovSec && ovSec.classList.contains("on")) renderOverview();
 }
 
-// ESC fecha o modal
+// ESC fecha modais
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") closeFab();
+  if (e.key === "Escape") { closeFab(); closeEditModal(); }
 });
 
 // ========== TOAST ==========
@@ -910,11 +937,17 @@ function renderInsightCalendar() {
   const receitas = events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Receita"; }).reduce((a,e)=>a+(e.amount||0),0);
   const despesas = events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Despesa"; }).reduce((a,e)=>a+(e.amount||0),0);
   const saldo = receitas - despesas;
+  // Categoria com maior gasto no mês
+  const catMap = {};
+  events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Despesa"; })
+    .forEach(e => { const c = e.category || "Outros"; catMap[c] = (catMap[c]||0) + (e.amount||0); });
+  const topCat = Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0];
   el.innerHTML = insightHTML([
     { label: "Receitas do Mês", value: fmt(receitas), color: "var(--green)" },
     { label: "Despesas do Mês", value: fmt(despesas), color: "var(--red)" },
     { label: "Saldo do Mês", value: fmt(saldo), color: saldo >= 0 ? "var(--green)" : "var(--red)" },
-    { label: "Eventos", value: events.length, sub: "no total" }
+    { label: "Eventos", value: events.length, sub: "no total" },
+    ...(topCat ? [{ label: "Maior Gasto", value: topCat[0], sub: fmt(topCat[1]), color: "var(--amber)" }] : [])
   ]);
 }
 
@@ -993,9 +1026,182 @@ function renderInsightBudget() {
   ]);
 }
 
+// ========== EDIT MODAL ==========
+const CATEGORIES = ["Alimentação","Transporte","Moradia","Saúde","Lazer","Educação","Salário","Outros"];
+
+function openEditModal(type, id) {
+  const modal = document.getElementById("edit-modal");
+  modal.dataset.type = type;
+  modal.dataset.id = id;
+  const catOpts = CATEGORIES.map(c => `<option value="${c}">{CAT}</option>`).join("");
+
+  let html = "";
+  if (type === "calendar") {
+    const item = (db.calendar || []).find(e => e.id === id);
+    if (!item) return;
+    document.getElementById("edit-modal-title").textContent = "Editar Evento";
+    const typeOpts = ["Despesa","Receita","Meta"].map(t => `<option ${item.type===t?"selected":""}>${t}</option>`).join("");
+    const cOpts = CATEGORIES.map(c => `<option value="${c}" ${item.category===c?"selected":""}>${c}</option>`).join("");
+    html = `
+      <input type="text" class="finp" id="e-title" value="${item.title}" placeholder="Título">
+      <input type="number" class="finp" id="e-amount" value="${item.amount}" placeholder="Valor">
+      <select class="finp" id="e-type">${typeOpts}</select>
+      <select class="finp" id="e-category"><option value="">Categoria</option>${cOpts}</select>
+      <input type="date" class="finp" id="e-date" value="${item.date}">
+      <label class="toggle-label"><input type="checkbox" id="e-recurring" ${item.recurring?"checked":""}> 🔄 Recorrente mensal</label>`;
+  } else if (type === "card") {
+    const item = (db.cards || []).find(c => c.id === id);
+    if (!item) return;
+    document.getElementById("edit-modal-title").textContent = "Editar Cartão";
+    html = `
+      <input type="text" class="finp" id="e-name" value="${item.name}" placeholder="Nome">
+      <input type="number" class="finp" id="e-limit" value="${item.limit}" placeholder="Limite (R$)">
+      <input type="number" class="finp" id="e-used" value="${item.used}" placeholder="Utilizado (R$)">
+      <input type="text" class="finp" id="e-bank" value="${item.bank}" placeholder="Banco">
+      <input type="text" class="finp" id="e-color" value="${item.color}" placeholder="Cor (#f97316)">`;
+  } else if (type === "account") {
+    const item = (db.accounts || []).find(a => a.id === id);
+    if (!item) return;
+    document.getElementById("edit-modal-title").textContent = "Editar Conta";
+    const tOpts = [["checking","Conta Corrente"],["savings","Poupança"],["investment","Investimento"],["wallet","Carteira"]]
+      .map(([v,l]) => `<option value="${v}" ${item.type===v?"selected":""}>${l}</option>`).join("");
+    html = `
+      <input type="text" class="finp" id="e-name" value="${item.name}" placeholder="Nome">
+      <input type="text" class="finp" id="e-bank" value="${item.bank}" placeholder="Banco">
+      <input type="number" class="finp" id="e-balance" value="${item.balance}" placeholder="Saldo (R$)">
+      <select class="finp" id="e-type">${tOpts}</select>`;
+  } else if (type === "investment") {
+    const item = (db.investments || []).find(i => i.id === id);
+    if (!item) return;
+    document.getElementById("edit-modal-title").textContent = "Editar Investimento";
+    const tOpts = [["stock","Ação"],["fund","Fundo"],["crypto","Cripto"],["fixed","Renda Fixa"],["other","Outro"]]
+      .map(([v,l]) => `<option value="${v}" ${item.type===v?"selected":""}>${l}</option>`).join("");
+    html = `
+      <input type="text" class="finp" id="e-name" value="${item.name}" placeholder="Nome">
+      <select class="finp" id="e-type">${tOpts}</select>
+      <input type="number" class="finp" id="e-initial" value="${item.initial}" placeholder="Valor inicial (R$)">
+      <input type="number" class="finp" id="e-current" value="${item.current}" placeholder="Valor atual (R$)">`;
+  } else if (type === "goal") {
+    const item = (db.goals || []).find(g => g.id === id);
+    if (!item) return;
+    document.getElementById("edit-modal-title").textContent = "Editar Meta";
+    html = `
+      <input type="text" class="finp" id="e-name" value="${item.name}" placeholder="Nome da meta">
+      <input type="number" class="finp" id="e-target" value="${item.target}" placeholder="Valor alvo (R$)">
+      <input type="number" class="finp" id="e-current" value="${item.current}" placeholder="Valor atual (R$)">
+      <input type="date" class="finp" id="e-deadline" value="${item.deadline || ""}">`;
+  }
+
+  document.getElementById("edit-modal-body").innerHTML = html;
+  modal.classList.add("open");
+}
+
+function saveEdit() {
+  const modal = document.getElementById("edit-modal");
+  const type = modal.dataset.type;
+  const id = parseFloat(modal.dataset.id);
+
+  if (type === "calendar") {
+    const item = (db.calendar || []).find(e => e.id === id);
+    if (!item) return;
+    item.title = document.getElementById("e-title").value.trim();
+    item.amount = parseFloat(document.getElementById("e-amount").value) || 0;
+    item.type = document.getElementById("e-type").value;
+    item.category = document.getElementById("e-category").value;
+    item.date = document.getElementById("e-date").value;
+    item.recurring = document.getElementById("e-recurring").checked;
+    persist(); saveToSheets(db); renderCalendar(); renderInsightCalendar();
+  } else if (type === "card") {
+    const item = (db.cards || []).find(c => c.id === id);
+    if (!item) return;
+    item.name = document.getElementById("e-name").value.trim();
+    item.limit = parseFloat(document.getElementById("e-limit").value) || 0;
+    item.used = parseFloat(document.getElementById("e-used").value) || 0;
+    item.bank = document.getElementById("e-bank").value.trim();
+    item.color = document.getElementById("e-color").value;
+    persist(); saveToSheets(db); renderCards(); renderInsightCards();
+  } else if (type === "account") {
+    const item = (db.accounts || []).find(a => a.id === id);
+    if (!item) return;
+    item.name = document.getElementById("e-name").value.trim();
+    item.bank = document.getElementById("e-bank").value.trim();
+    item.balance = parseFloat(document.getElementById("e-balance").value) || 0;
+    item.type = document.getElementById("e-type").value;
+    persist(); saveToSheets(db); renderAccounts(); renderInsightAccounts();
+  } else if (type === "investment") {
+    const item = (db.investments || []).find(i => i.id === id);
+    if (!item) return;
+    item.name = document.getElementById("e-name").value.trim();
+    item.type = document.getElementById("e-type").value;
+    item.initial = parseFloat(document.getElementById("e-initial").value) || 0;
+    item.current = parseFloat(document.getElementById("e-current").value) || 0;
+    persist(); saveToSheets(db); renderInvestments(); renderInsightInvestments();
+  } else if (type === "goal") {
+    const item = (db.goals || []).find(g => g.id === id);
+    if (!item) return;
+    item.name = document.getElementById("e-name").value.trim();
+    item.target = parseFloat(document.getElementById("e-target").value) || 0;
+    item.current = parseFloat(document.getElementById("e-current").value) || 0;
+    item.deadline = document.getElementById("e-deadline").value;
+    persist(); saveToSheets(db); renderGoals(); renderInsightGoals();
+  }
+
+  closeEditModal();
+  showToast("✅ Atualizado!");
+}
+
+function closeEditModal() {
+  const modal = document.getElementById("edit-modal");
+  if (modal) modal.classList.remove("open");
+}
+
+function closeEditOnOverlay(e) {
+  if (e.target === document.getElementById("edit-modal")) closeEditModal();
+}
+
+// ========== TRANSAÇÕES RECORRENTES ==========
+function generateRecurring() {
+  const today = new Date();
+  const m = today.getMonth(), y = today.getFullYear();
+  const recurring = (db.calendar || []).filter(e => e.recurring && !e.parentId);
+  let added = false;
+
+  recurring.forEach(ev => {
+    const origDate = new Date(ev.date);
+    // Já está no mês corrente — não duplicar
+    if (origDate.getMonth() === m && origDate.getFullYear() === y) return;
+    // Já existe instância para este mês
+    const exists = (db.calendar || []).some(x =>
+      x.parentId === ev.id &&
+      new Date(x.date).getMonth() === m &&
+      new Date(x.date).getFullYear() === y
+    );
+    if (exists) return;
+    // Criar instância
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    const day = Math.min(origDate.getDate(), lastDay);
+    const newDate = new Date(y, m, day).toISOString().split("T")[0];
+    db.calendar.push({
+      id: Date.now() + Math.random(),
+      title: ev.title,
+      date: newDate,
+      amount: ev.amount,
+      type: ev.type,
+      category: ev.category || "Outros",
+      recurring: false,
+      parentId: ev.id,
+      createdAt: new Date().toISOString()
+    });
+    added = true;
+  });
+
+  if (added) persist();
+}
+
 // ========== INIT ==========
 function init() {
   load();
+  generateRecurring();
   renderOverview();
   goTo("overview");
   updateBudget();

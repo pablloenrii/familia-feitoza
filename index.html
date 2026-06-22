@@ -170,8 +170,22 @@
               <option>Receita</option>
               <option>Meta</option>
             </select>
+            <select class="finp" id="evt-category">
+              <option value="">Categoria</option>
+              <option value="Alimentação">🍔 Alimentação</option>
+              <option value="Transporte">🚗 Transporte</option>
+              <option value="Moradia">🏠 Moradia</option>
+              <option value="Saúde">💊 Saúde</option>
+              <option value="Lazer">🎮 Lazer</option>
+              <option value="Educação">📚 Educação</option>
+              <option value="Salário">💼 Salário</option>
+              <option value="Outros">📦 Outros</option>
+            </select>
             <button class="btn full" onclick="addCalendarEvent()">+ Adicionar</button>
           </div>
+          <label class="toggle-label" style="margin-top:8px">
+            <input type="checkbox" id="evt-recurring"> 🔄 Recorrente mensal
+          </label>
         </div>
 
         <div id="calendar-view" class="card"></div>
@@ -385,8 +399,34 @@
         <option>Despesa</option>
         <option>Receita</option>
       </select>
+      <select class="finp" id="fab-category">
+        <option value="">Categoria</option>
+        <option value="Alimentação">🍔 Alimentação</option>
+        <option value="Transporte">🚗 Transporte</option>
+        <option value="Moradia">🏠 Moradia</option>
+        <option value="Saúde">💊 Saúde</option>
+        <option value="Lazer">🎮 Lazer</option>
+        <option value="Educação">📚 Educação</option>
+        <option value="Salário">💼 Salário</option>
+        <option value="Outros">📦 Outros</option>
+      </select>
       <input type="date" class="finp" id="fab-date">
+      <label class="toggle-label">
+        <input type="checkbox" id="fab-recurring"> 🔄 Recorrente mensal
+      </label>
       <button class="btn full" onclick="saveFab()">Salvar</button>
+    </div>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div id="edit-modal" class="fab-modal-overlay" onclick="closeEditOnOverlay(event)">
+    <div class="fab-modal-box" style="max-width:440px">
+      <div class="fab-modal-header">
+        <div class="fab-modal-title" id="edit-modal-title">Editar</div>
+        <button class="btn-d" onclick="closeEditModal()">✕</button>
+      </div>
+      <div id="edit-modal-body"></div>
+      <button class="btn full" style="margin-top:8px" onclick="saveEdit()">Salvar alterações</button>
     </div>
   </div>
 
