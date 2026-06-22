@@ -13,6 +13,8 @@ let db = {
 const STORAGE_KEY = "familia_feitoza_db";
 const MAX_ONB_STEPS = 4;
 let onbStep = 1;
+let calMonth = new Date().getMonth();
+let calYear = new Date().getFullYear();
 
 // ========== FORMATTING ==========
 function fmt(val) {
@@ -63,9 +65,9 @@ function goTo(page) {
 
   // Renderizar conteúdo
   if (page === "cards") { renderCards(); renderInsightCards(); }
-  if (page === "accounts") { renderAccounts(); renderInsightAccounts(); }
-  if (page === "calendar") { renderCalendar(); renderInsightCalendar(); }
-  if (page === "investments") { renderInvestments(); renderInsightInvestments(); }
+  if (page === "accounts") { renderAccounts(); renderInsightAccounts(); renderChartAccounts(); }
+  if (page === "calendar") { renderCalendar(); renderInsightCalendar(); renderChartCalendar(); }
+  if (page === "investments") { renderInvestments(); renderInsightInvestments(); renderChartInvestments(); }
   if (page === "goals") { renderGoals(); renderInsightGoals(); }
   if (page === "budget") { updateBudget(); renderInsightBudget(); }
   if (page === "overview") renderOverview();
@@ -170,6 +172,9 @@ function renderOverview() {
       if (healthBox) healthBox.style.borderColor = "rgba(239,68,68,0.3)";
     }
   }
+
+  // Alertas
+  renderAlerts();
 
   // Próximos eventos
   renderUpcomingExpenses();
@@ -432,12 +437,24 @@ function renderCalendar() {
   const container = document.getElementById("calendar-view");
   if (!container) return;
 
-  if (!db.calendar || !db.calendar.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">Nenhum evento adicionado</div></div>`;
+  // Atualizar label do mês
+  const label = document.getElementById("cal-month-label");
+  if (label) {
+    label.textContent = new Date(calYear, calMonth, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  }
+
+  // Filtrar pelo mês selecionado
+  const filtered = (db.calendar || []).filter(e => {
+    const d = new Date(e.date);
+    return d.getMonth() === calMonth && d.getFullYear() === calYear;
+  });
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">Nenhum evento em ${new Date(calYear,calMonth,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</div></div>`;
     return;
   }
 
-  const sorted = [...db.calendar].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sorted = [...filtered].sort((a, b) => new Date(a.date) - new Date(b.date));
 
   container.innerHTML = sorted
     .map(e => {
@@ -931,8 +948,7 @@ function renderInsightCards() {
 function renderInsightCalendar() {
   const el = document.getElementById("insight-calendar");
   if (!el) return;
-  const today = new Date();
-  const m = today.getMonth(), y = today.getFullYear();
+  const m = calMonth, y = calYear;
   const events = db.calendar || [];
   const receitas = events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Receita"; }).reduce((a,e)=>a+(e.amount||0),0);
   const despesas = events.filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Despesa"; }).reduce((a,e)=>a+(e.amount||0),0);
@@ -1024,6 +1040,147 @@ function renderInsightBudget() {
     { label: "Investimentos (20%)", value: fmt(invest), color: "var(--green)" },
     { label: "Saldo Livre", value: fmt(sobra), color: sobra >= 0 ? "var(--green)" : "var(--red)", sub: dentroNecessidades ? "✅ Dentro do 50%" : "⚠️ Acima do 50%" }
   ]);
+}
+
+// ========== FILTRO DE MÊS ==========
+function calPrevMonth() {
+  if (calMonth === 0) { calMonth = 11; calYear--; } else calMonth--;
+  renderCalendar(); renderInsightCalendar(); renderChartCalendar();
+}
+
+function calNextMonth() {
+  if (calMonth === 11) { calMonth = 0; calYear++; } else calMonth++;
+  renderCalendar(); renderInsightCalendar(); renderChartCalendar();
+}
+
+// ========== ALERTAS ==========
+function renderAlerts() {
+  const container = document.getElementById("alerts-container");
+  if (!container) return;
+
+  const alerts = [];
+  const today = new Date();
+  const m = today.getMonth(), y = today.getFullYear();
+
+  // Cartões acima de 80%
+  (db.cards || []).filter(c => c.limit > 0 && (c.used / c.limit) >= 0.8).forEach(c => {
+    const pct = ((c.used / c.limit) * 100).toFixed(0);
+    alerts.push({ type: "danger", msg: `💳 Cartão "${c.name}" com ${pct}% do limite utilizado` });
+  });
+
+  // Metas atrasadas
+  (db.goals || []).filter(g => g.deadline && new Date(g.deadline) < today && g.current < g.target).forEach(g => {
+    alerts.push({ type: "warning", msg: `🎯 Meta "${g.name}" está atrasada` });
+  });
+
+  // Despesas > 50% da renda no mês atual
+  const despesasMes = (db.calendar || [])
+    .filter(e => { const d = new Date(e.date); return d.getMonth()===m && d.getFullYear()===y && e.type==="Despesa"; })
+    .reduce((a, e) => a + (e.amount || 0), 0);
+  if (db.income > 0 && despesasMes > db.income * 0.5) {
+    alerts.push({ type: "warning", msg: `💰 Despesas do mês (${fmt(despesasMes)}) ultrapassaram 50% da renda` });
+  }
+
+  if (!alerts.length) { container.innerHTML = ""; return; }
+
+  container.innerHTML = `
+    <div class="card" style="border-color:rgba(239,68,68,0.2)">
+      <div class="slbl" style="color:var(--red)">⚠️ Alertas</div>
+      ${alerts.map(a => `
+        <div style="padding:10px 14px;background:${a.type==="danger"?"rgba(239,68,68,0.06)":"rgba(245,158,11,0.06)"};border:1px solid ${a.type==="danger"?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.15)"};border-radius:8px;margin-bottom:8px;font-size:13px;font-weight:600;color:${a.type==="danger"?"var(--red)":"var(--amber)"}">
+          ${a.msg}
+        </div>`).join("")}
+    </div>`;
+}
+
+// ========== GRÁFICOS ==========
+function renderChartCalendar() {
+  const ctx = document.getElementById("chart-category");
+  const card = document.getElementById("card-chart-cal");
+  if (!ctx || !card) return;
+  if (ctx.chartInstance) { ctx.chartInstance.destroy(); ctx.chartInstance = null; }
+
+  const catMap = {};
+  (db.calendar || [])
+    .filter(e => { const d = new Date(e.date); return d.getMonth()===calMonth && d.getFullYear()===calYear && e.type==="Despesa"; })
+    .forEach(e => { const c = e.category || "Outros"; catMap[c] = (catMap[c]||0) + (e.amount||0); });
+
+  const entries = Object.entries(catMap).sort((a,b) => b[1]-a[1]);
+  if (!entries.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+
+  const colors = ["#f97316","#3b82f6","#22c55e","#ef4444","#f59e0b","#8b5cf6","#06b6d4","#64748b"];
+  ctx.chartInstance = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: entries.map(e => e[0]),
+      datasets: [{ data: entries.map(e => e[1]), backgroundColor: colors.slice(0, entries.length), borderColor: "#111113", borderWidth: 2 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, cutout: "60%",
+      plugins: {
+        legend: { position: "right", labels: { color: "#a1a1aa", font: { size: 11 }, padding: 12 } },
+        tooltip: { callbacks: { label: c => ` ${fmt(c.raw)}` } }
+      }
+    }
+  });
+}
+
+function renderChartInvestments() {
+  const ctx = document.getElementById("chart-investments");
+  const card = document.getElementById("card-chart-inv");
+  if (!ctx || !card) return;
+  if (ctx.chartInstance) { ctx.chartInstance.destroy(); ctx.chartInstance = null; }
+
+  const invs = db.investments || [];
+  if (!invs.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+
+  ctx.chartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: invs.map(i => i.name),
+      datasets: [
+        { label: "Investido", data: invs.map(i => i.initial), backgroundColor: "rgba(59,130,246,0.7)", borderRadius: 6 },
+        { label: "Atual", data: invs.map(i => i.current), backgroundColor: "rgba(249,115,22,0.7)", borderRadius: 6 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: "#a1a1aa", font: { size: 11 } } } },
+      scales: {
+        x: { ticks: { color: "#71717a" }, grid: { color: "rgba(255,255,255,0.04)" } },
+        y: { ticks: { color: "#71717a", callback: v => "R$" + Number(v).toLocaleString("pt-BR") }, grid: { color: "rgba(255,255,255,0.04)" } }
+      }
+    }
+  });
+}
+
+function renderChartAccounts() {
+  const ctx = document.getElementById("chart-accounts");
+  const card = document.getElementById("card-chart-acc");
+  if (!ctx || !card) return;
+  if (ctx.chartInstance) { ctx.chartInstance.destroy(); ctx.chartInstance = null; }
+
+  const accounts = db.accounts || [];
+  if (!accounts.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+
+  ctx.chartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: accounts.map(a => a.name),
+      datasets: [{ label: "Saldo", data: accounts.map(a => a.balance), backgroundColor: accounts.map(a => a.color || "#f97316"), borderRadius: 6 }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#71717a" }, grid: { color: "rgba(255,255,255,0.04)" } },
+        y: { ticks: { color: "#71717a", callback: v => "R$" + Number(v).toLocaleString("pt-BR") }, grid: { color: "rgba(255,255,255,0.04)" } }
+      }
+    }
+  });
 }
 
 // ========== EDIT MODAL ==========

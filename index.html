@@ -98,6 +98,9 @@
           </div>
         </div>
 
+        <!-- ALERTAS -->
+        <div id="alerts-container" style="margin-bottom:20px"></div>
+
         <!-- LINHA 2: Próximos Eventos + Metas -->
         <div class="g2" style="margin-bottom:20px">
           <div class="card">
@@ -188,7 +191,18 @@
           </label>
         </div>
 
+        <div class="month-nav">
+          <button class="btn-s" onclick="calPrevMonth()">← Anterior</button>
+          <span id="cal-month-label" style="font-weight:700;font-size:14px;color:var(--text)"></span>
+          <button class="btn-s" onclick="calNextMonth()">Próximo →</button>
+        </div>
+
         <div id="calendar-view" class="card"></div>
+
+        <div class="card" id="card-chart-cal" style="margin-top:20px;display:none">
+          <div class="slbl">Gastos por Categoria</div>
+          <canvas id="chart-category" style="max-height:240px"></canvas>
+        </div>
       </section>
 
       <!-- BUDGET 50/30/20 -->
@@ -274,7 +288,13 @@
         </div>
 
         <div id="accounts-grid" class="g3"></div>
-        <div class="card" style="margin-top:24px;text-align:center">
+
+        <div class="card" id="card-chart-acc" style="margin-bottom:20px;display:none">
+          <div class="slbl">Saldo por Conta</div>
+          <canvas id="chart-accounts" style="max-height:180px"></canvas>
+        </div>
+
+        <div class="card" style="margin-top:0;text-align:center">
           <div class="slbl">Patrimônio Total</div>
           <div style="font-size:32px;font-weight:800;color:var(--orange)" id="total-patrimony">R$ 0</div>
         </div>
@@ -308,6 +328,11 @@
         </div>
 
         <div id="investments-grid" class="g3"></div>
+
+        <div class="card" id="card-chart-inv" style="display:none">
+          <div class="slbl">Comparativo por Ativo</div>
+          <canvas id="chart-investments" style="max-height:220px"></canvas>
+        </div>
       </section>
 
       <!-- METAS -->
