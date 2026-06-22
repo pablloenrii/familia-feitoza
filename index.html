@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Familia Feitoza - Dashboard Financeiro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-icon">FF</div>
+      <div>
+        <div class="sb-logo-text">Feitoza</div>
+        <div class="sb-logo-sub">Finanças</div>
+      </div>
+    </div>
+    
+    <nav class="sb-nav">
+      <div class="sb-section">Menu</div>
+      <div class="sb-item on" onclick="goTo('overview')"><span class="sb-icon">📊</span> Visão Geral</div>
+      <div class="sb-item" onclick="goTo('cards')"><span class="sb-icon">💳</span> Cartões</div>
+      <div class="sb-item" onclick="goTo('calendar')"><span class="sb-icon">📅</span> Calendário</div>
+      <div class="sb-item" onclick="goTo('budget')"><span class="sb-icon">💰</span> Budget 50/30/20</div>
+      <div class="sb-item" onclick="goTo('accounts')"><span class="sb-icon">🏦</span> Contas</div>
+      <div class="sb-item" onclick="goTo('investments')"><span class="sb-icon">📈</span> Investimentos</div>
+      <div class="sb-item" onclick="goTo('goals')"><span class="sb-icon">🎯</span> Metas</div>
+    </nav>
+
+    <div class="sb-footer">
+      <button class="btn-s full" onclick="syncWithSheets()" style="margin-bottom:8px">🔄 Sincronizar</button>
+      <button class="btn-s full" onclick="exportData()">⬇️ Exportar</button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+    <div class="topbar">
+      <div class="topbar-left">Familia Feitoza • Dashboard Financeiro</div>
+      <div class="topbar-right">
+        <span id="sync-status" class="topbar-badge" style="border-color:var(--text4);color:var(--text4)">⏳ Local</span>
+        <button class="theme-btn" onclick="toggleTheme()">🌙</button>
+      </div>
+    </div>
+
+    <div class="page">
+      <!-- OVERVIEW -->
+      <section id="sec-overview" class="sec on">
+        <div class="hero">
+          <div class="hero-tag">Dashboard Financeiro</div>
+          <div class="hero-title">Bem-vindo à Familia Feitoza</div>
+          <div class="hero-sub">Controle completo das suas finanças em um lugar</div>
+          <div class="hero-grid">
+            <div class="hero-card">
+              <div class="hero-card-label">Patrimônio Total</div>
+              <div class="hero-card-value" id="total-net">R$ 0</div>
+              <div class="hero-card-sub">Atualizado agora</div>
+            </div>
+            <div class="hero-card">
+              <div class="hero-card-label">Receita Mensal</div>
+              <div class="hero-card-value" id="monthly-income">R$ 0</div>
+              <div class="hero-card-sub">Mês atual</div>
+            </div>
+            <div class="hero-card">
+              <div class="hero-card-label">Despesas Mês</div>
+              <div class="hero-card-value" id="monthly-expenses">R$ 0</div>
+              <div class="hero-card-sub">Até hoje</div>
+            </div>
+            <div class="hero-card">
+              <div class="hero-card-label">Saldo Mês</div>
+              <div class="hero-card-value" id="monthly-balance">R$ 0</div>
+              <div class="hero-card-sub">Receita - Despesa</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="g2">
+          <div class="card">
+            <div class="slbl">Evolução Mensal (Últimos 6 meses)</div>
+            <canvas id="chart-evolution"></canvas>
+          </div>
+          <div class="card">
+            <div class="slbl">Composição do Patrimônio</div>
+            <canvas id="chart-composition"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="slbl">Próximas Despesas (Calendário)</div>
+          <div id="upcoming-expenses"></div>
+        </div>
+      </section>
+
+      <!-- CARTÕES DE CRÉDITO -->
+      <section id="sec-cards" class="sec">
+        <div class="sec-head">
+          <div class="sec-tag">Gestão</div>
+          <div class="sec-title">Cartões de Crédito</div>
+          <div class="sec-sub">Acompanhe limites, faturas e próximos vencimentos</div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+          <div class="slbl">Adicionar Novo Cartão</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+            <input type="text" class="finp" id="card-name" placeholder="Nome do cartão">
+            <input type="number" class="finp" id="card-limit" placeholder="Limite (R$)">
+            <input type="text" class="finp" id="card-bank" placeholder="Banco">
+            <input type="text" class="finp" id="card-color" placeholder="#f97316" value="#f97316">
+            <button class="btn full" onclick="addCard()">+ Adicionar</button>
+          </div>
+        </div>
+
+        <div id="cards-grid" class="g3"></div>
+      </section>
+
+      <!-- CALENDÁRIO -->
+      <section id="sec-calendar" class="sec">
+        <div class="sec-head">
+          <div class="sec-tag">Organização</div>
+          <div class="sec-title">Calendário Financeiro</div>
+          <div class="sec-sub">Visualize todas as datas importantes</div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+          <div class="slbl">Adicionar Evento</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+            <input type="text" class="finp" id="evt-title" placeholder="Título">
+            <input type="date" class="finp" id="evt-date">
+            <input type="number" class="finp" id="evt-amount" placeholder="Valor (R$)">
+            <select class="finp" id="evt-type">
+              <option>Despesa</option>
+              <option>Receita</option>
+              <option>Meta</option>
+            </select>
+            <button class="btn full" onclick="addCalendarEvent()">+ Adicionar</button>
+          </div>
+        </div>
+
+        <div id="calendar-view" class="card"></div>
+      </section>
+
+      <!-- BUDGET 50/30/20 -->
+      <section id="sec-budget" class="sec">
+        <div class="sec-head">
+          <div class="sec-tag">Planejamento</div>
+          <div class="sec-title">Budget 50/30/20</div>
+          <div class="sec-sub">Distribua sua renda de forma inteligente</div>
+        </div>
+
+        <div class="g2">
+          <div class="card">
+            <div class="slbl">Sua Renda Mensal</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <input type="number" class="finp" id="income-amount" placeholder="Renda (R$)" value="0">
+              <button class="btn" onclick="updateBudget()">Atualizar</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="slbl">Resumo da Distribuição</div>
+            <div id="budget-summary"></div>
+          </div>
+        </div>
+
+        <div class="g3">
+          <div class="card-a">
+            <div class="slbl">Necessidades (50%)</div>
+            <div class="budget-value" id="budget-needs">R$ 0</div>
+            <div class="budget-bar">
+              <div class="prog">
+                <div class="pf" id="bar-needs" style="width:0%;background:var(--blue)"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card-a">
+            <div class="slbl">Desejos (30%)</div>
+            <div class="budget-value" id="budget-wants">R$ 0</div>
+            <div class="budget-bar">
+              <div class="prog">
+                <div class="pf" id="bar-wants" style="width:0%;background:var(--orange)"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card-a">
+            <div class="slbl">Investimentos (20%)</div>
+            <div class="budget-value" id="budget-invest">R$ 0</div>
+            <div class="budget-bar">
+              <div class="prog">
+                <div class="pf" id="bar-invest" style="width:0%;background:var(--green)"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONTAS BANCÁRIAS -->
+      <section id="sec-accounts" class="sec">
+        <div class="sec-head">
+          <div class="sec-tag">Patrimônio</div>
+          <div class="sec-title">Contas Bancárias</div>
+          <div class="sec-sub">Gerencie suas contas e saldos</div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+          <div class="slbl">Nova Conta</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+            <input type="text" class="finp" id="a-name" placeholder="Nome da conta">
+            <input type="text" class="finp" id="a-bank" placeholder="Banco">
+            <select class="finp" id="a-type">
+              <option value="checking">Conta Corrente</option>
+              <option value="savings">Poupança</option>
+              <option value="investment">Investimento</option>
+              <option value="wallet">Carteira</option>
+            </select>
+            <input type="number" class="finp" id="a-balance" placeholder="Saldo inicial">
+            <input type="color" class="finp" id="a-color" value="#f97316">
+            <button class="btn full" onclick="addAccount()">+ Adicionar</button>
+          </div>
+        </div>
+
+        <div id="accounts-grid" class="g3"></div>
+        <div class="card" style="margin-top:24px;text-align:center">
+          <div class="slbl">Patrimônio Total</div>
+          <div style="font-size:32px;font-weight:800;color:var(--orange)" id="total-patrimony">R$ 0</div>
+        </div>
+      </section>
+
+      <!-- INVESTIMENTOS -->
+      <section id="sec-investments" class="sec">
+        <div class="sec-head">
+          <div class="sec-tag">Crescimento</div>
+          <div class="sec-title">Investimentos</div>
+          <div class="sec-sub">Acompanhe suas aplicações e rentabilidade</div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+          <div class="slbl">Novo Investimento</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+            <input type="text" class="finp" id="inv-name" placeholder="Nome (ex: PETR4, Bitcoin)">
+            <select class="finp" id="inv-type">
+              <option value="stock">Ação</option>
+              <option value="fund">Fundo</option>
+              <option value="crypto">Cripto</option>
+              <option value="fixed">Renda Fixa</option>
+              <option value="other">Outro</option>
+            </select>
+            <input type="number" class="finp" id="inv-initial" placeholder="Valor inicial (R$)">
+            <input type="number" class="finp" id="inv-current" placeholder="Valor atual (R$)">
+            <button class="btn full" onclick="addInvestment()">+ Adicionar</button>
+          </div>
+        </div>
+
+        <div id="investments-grid" class="g3"></div>
+      </section>
+
+      <!-- METAS -->
+      <section id="sec-goals" class="sec">
+        <div class="sec-head">
+          <div class="sec-tag">Objetivos</div>
+          <div class="sec-title">Metas de Economia</div>
+          <div class="sec-sub">Defina seus objetivos financeiros</div>
+        </div>
+
+        <div class="card" style="margin-bottom:24px">
+          <div class="slbl">Nova Meta</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+            <input type="text" class="finp" id="goal-name" placeholder="Nome da meta">
+            <input type="number" class="finp" id="goal-target" placeholder="Valor alvo (R$)">
+            <input type="number" class="finp" id="goal-current" placeholder="Valor atual (R$)">
+            <input type="date" class="finp" id="goal-deadline">
+            <button class="btn full" onclick="addGoal()">+ Adicionar</button>
+          </div>
+        </div>
+
+        <div id="goals-grid" class="g2"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ONBOARDING MODAL -->
+  <div id="onb-modal" class="onb-modal">
+    <div class="onb-box">
+      <div class="onb-header">
+        <div class="onb-title">Bem-vindo ao Familia Feitoza! 👋</div>
+        <div class="onb-progress">
+          <div class="onb-progress-bar" id="onb-progress-bar"></div>
+        </div>
+      </div>
+
+      <div class="onb-step on" data-step="1">
+        <div class="onb-content">
+          <div class="onb-icon">🏠</div>
+          <div class="onb-text">Vamos configurar seu dashboard de finanças familiares</div>
+          <button class="btn full" onclick="nextOnboarding()">Começar</button>
+        </div>
+      </div>
+
+      <div class="onb-step" data-step="2">
+        <div class="onb-content">
+          <div class="onb-icon">💵</div>
+          <div class="onb-text">Qual é a sua renda mensal?</div>
+          <input type="number" class="finp" id="onb-income" placeholder="R$">
+          <button class="btn full" onclick="nextOnboarding()">Próximo</button>
+        </div>
+      </div>
+
+      <div class="onb-step" data-step="3">
+        <div class="onb-content">
+          <div class="onb-icon">🎯</div>
+          <div class="onb-text">Qual é sua primeira meta?</div>
+          <input type="text" class="finp" id="onb-goal-name" placeholder="Ex: Fundo de emergência">
+          <input type="number" class="finp" id="onb-goal-target" placeholder="Valor alvo (R$)">
+          <button class="btn full" onclick="nextOnboarding()">Próximo</button>
+        </div>
+      </div>
+
+      <div class="onb-step" data-step="4">
+        <div class="onb-content">
+          <div class="onb-icon">✨</div>
+          <div class="onb-text">Tudo pronto! Comece agora</div>
+          <button class="btn full" onclick="finishOnboarding()">Entrar no Dashboard</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="js/app.js"></script>
+  <script src="js/sheets-sync.js"></script>
+  <script src="js/modules.js"></script>
+</body>
+</html>
