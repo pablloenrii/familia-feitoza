@@ -88,7 +88,13 @@
         <div class="sec-header">
           <div>
             <h1 class="sec-title" id="overview-heading">Visão Geral</h1>
-            <p class="sec-sub">Panorama financeiro do mês</p>
+            <p class="sec-sub">Panorama financeiro mensal</p>
+          </div>
+          <!-- Navegação de mês -->
+          <div class="month-nav" role="group" aria-label="Selecionar mês">
+            <button class="icon-btn" data-action="ov-prev" aria-label="Mês anterior">◀</button>
+            <span id="ov-month-label" class="month-label" aria-live="polite"></span>
+            <button class="icon-btn" data-action="ov-next" aria-label="Próximo mês">▶</button>
           </div>
         </div>
 

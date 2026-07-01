@@ -337,6 +337,10 @@ img { max-width: 100%; }
   letter-spacing: -.01em;
 }
 
+/* Seletor de mês no header da visão geral */
+.sec-header .month-nav { margin-top: 4px; }
+.sec-header .month-label { font-size: 13px; font-weight: 600; min-width: 120px; }
+
 /* ============================================================
    8. ALERTAS
 ============================================================ */

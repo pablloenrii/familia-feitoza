@@ -12,10 +12,14 @@ let db = deepClone(DEFAULT_DB);
 
 const STATE = {
   page:        'overview',
+  // Estado do calendário
   calMonth:    new Date().getMonth(),
   calYear:     new Date().getFullYear(),
   calFilter:   'all',
   calSearch:   '',
+  // Estado da visão geral (mês selecionado)
+  ovMonth:     new Date().getMonth(),
+  ovYear:      new Date().getFullYear(),
   onbStep:     0,
   editType:    null,
   editId:      null,
@@ -91,6 +95,9 @@ function goTo(page) {
 // 4. OVERVIEW
 // ============================================================
 function renderOverview() {
+  // Atualiza label do mês selecionado
+  const label = document.getElementById('ov-month-label');
+  if (label) label.textContent = fmtMonth(STATE.ovMonth, STATE.ovYear);
   renderAlerts();
   renderKPIs();
   renderUpcomingExpenses();
@@ -100,10 +107,22 @@ function renderOverview() {
   renderChartPatrimonio();
 }
 
+function ovPrevMonth() {
+  STATE.ovMonth--;
+  if (STATE.ovMonth < 0) { STATE.ovMonth = 11; STATE.ovYear--; }
+  renderOverview();
+}
+
+function ovNextMonth() {
+  STATE.ovMonth++;
+  if (STATE.ovMonth > 11) { STATE.ovMonth = 0; STATE.ovYear++; }
+  renderOverview();
+}
+
 function renderKPIs() {
-  const now    = new Date();
-  const month  = now.getMonth();
-  const year   = now.getFullYear();
+  const month = STATE.ovMonth;
+  const year  = STATE.ovYear;
+  const now   = new Date();
 
   const monthEvents = db.calendar.filter(e => {
     if (!e.date) return false;
@@ -117,10 +136,12 @@ function renderKPIs() {
   const patrimonio    = db.accounts.reduce((a, acc) => a + Number(acc.balance || 0), 0)
                       + db.investments.reduce((a, inv) => a + Number(inv.current || 0), 0);
 
-  const diasPassados = now.getDate();
-  const gastoDiario  = diasPassados > 0 ? totalDespesas / diasPassados : 0;
-  const diasMes      = new Date(year, month + 1, 0).getDate();
-  const projecao     = gastoDiario * diasMes;
+  // Dias passados: só faz sentido para o mês atual
+  const isCurrentMonth = month === now.getMonth() && year === now.getFullYear();
+  const diasPassados   = isCurrentMonth ? now.getDate() : new Date(year, month + 1, 0).getDate();
+  const gastoDiario    = diasPassados > 0 ? totalDespesas / diasPassados : 0;
+  const diasMes        = new Date(year, month + 1, 0).getDate();
+  const projecao       = isCurrentMonth ? gastoDiario * diasMes : totalDespesas;
 
   const catMap = {};
   monthEvents.filter(e => e.type === 'Despesa').forEach(e => {
@@ -133,8 +154,8 @@ function renderKPIs() {
     { label: 'Despesas do Mês',         value: fmt(totalDespesas), icon: '📤', color: 'red',    sub: 'Saídas' },
     { label: 'Saldo do Mês',            value: fmt(saldoMes),      icon: '💵', color: saldoMes >= 0 ? 'green' : 'red', sub: saldoMes >= 0 ? 'Positivo' : 'Negativo' },
     { label: 'Patrimônio Líquido',      value: fmt(patrimonio),    icon: '🏛️', color: 'blue',   sub: 'Contas + Investimentos' },
-    { label: 'Gasto Médio Diário',      value: fmt(gastoDiario),   icon: '📅', color: 'orange', sub: `Baseado em ${diasPassados} dias` },
-    { label: 'Projeção Fim do Mês',     value: fmt(projecao),      icon: '🔮', color: projecao > (db.income || 0) * 1.1 ? 'red' : 'green', sub: `${diasMes} dias no mês` },
+    { label: 'Gasto Médio Diário',      value: fmt(gastoDiario),   icon: '📅', color: 'orange', sub: isCurrentMonth ? `Baseado em ${diasPassados} dias` : `Média do mês` },
+    { label: isCurrentMonth ? 'Projeção Fim do Mês' : 'Total de Despesas', value: fmt(projecao), icon: '🔮', color: projecao > (db.income || 0) * 1.1 ? 'red' : 'green', sub: isCurrentMonth ? `Projeção para ${diasMes} dias` : MONTHS_PT[month] },
     { label: 'Renda Mensal',            value: fmt(db.income),     icon: '💼', color: 'purple', sub: 'Configurada no budget' },
     { label: 'Maior Categoria de Gasto',value: maiorCat ? `${catIcon(maiorCat[0])} ${maiorCat[0]}` : '—', icon: '🔝', color: 'orange', sub: maiorCat ? fmt(maiorCat[1]) : 'Sem despesas' },
   ];
@@ -252,12 +273,15 @@ function renderAlerts() {
   });
 
   if (income > 0) {
-    const now = new Date();
     const monthDespesas = db.calendar
-      .filter(e => e.type === 'Despesa' && e.date && new Date(e.date + 'T00:00:00').getMonth() === now.getMonth())
+      .filter(e => {
+        if (e.type !== 'Despesa' || !e.date) return false;
+        const d = new Date(e.date + 'T00:00:00');
+        return d.getMonth() === STATE.ovMonth && d.getFullYear() === STATE.ovYear;
+      })
       .reduce((a, e) => a + Number(e.amount || 0), 0);
     if (monthDespesas > income * 0.5) {
-      alerts.push({ type: 'warning', msg: `📤 Despesas (${fmt(monthDespesas)}) ultrapassam 50% da renda` });
+      alerts.push({ type: 'warning', msg: `📤 Despesas de ${MONTHS_PT[STATE.ovMonth]} (${fmt(monthDespesas)}) ultrapassam 50% da renda` });
     }
   }
 
@@ -816,9 +840,8 @@ function renderInsightBudget() {
 function renderInsightOverview() {
   const el = document.getElementById('insight-overview');
   if (!el) return;
-  const now   = new Date();
-  const month = now.getMonth();
-  const year  = now.getFullYear();
+  const month = STATE.ovMonth;
+  const year  = STATE.ovYear;
   const monthEvents = db.calendar.filter(e => {
     if (!e.date) return false;
     const d = new Date(e.date + 'T00:00:00');
@@ -830,12 +853,12 @@ function renderInsightOverview() {
   const patrimonio = db.accounts.reduce((a, acc) => a + Number(acc.balance || 0), 0)
                    + db.investments.reduce((a, inv) => a + Number(inv.current || 0), 0);
   el.innerHTML = insightHTML([
-    { label: 'Taxa de Poupança', value: `${taxa.toFixed(1)}%`,           sub: '(receitas − despesas) / receitas' },
-    { label: 'Patrimônio Total', value: fmt(patrimonio),                  sub: 'contas + investimentos' },
-    { label: 'Eventos no Mês',   value: String(monthEvents.length),       sub: MONTHS_PT[month] },
+    { label: 'Taxa de Poupança',  value: `${taxa.toFixed(1)}%`,              sub: '(receitas − despesas) / receitas' },
+    { label: 'Patrimônio Total',  value: fmt(patrimonio),                     sub: 'contas + investimentos' },
+    { label: 'Eventos no Mês',    value: String(monthEvents.length),          sub: `${MONTHS_PT[month]} ${year}` },
     { label: 'Metas em Andamento',value: String(db.goals.filter(g => Number(g.saved) < Number(g.target)).length), sub: 'ativas' },
-    { label: 'Cartões Ativos',   value: String(db.cards.length),          sub: 'cadastrados' },
-    { label: 'Contas Bancárias', value: String(db.accounts.length),       sub: 'cadastradas' },
+    { label: 'Cartões Ativos',    value: String(db.cards.length),             sub: 'cadastrados' },
+    { label: 'Contas Bancárias',  value: String(db.accounts.length),          sub: 'cadastradas' },
   ]);
 }
 
@@ -1374,6 +1397,8 @@ function setupEventDelegation() {
       case 'close-edit':        closeEditModal(); break;
       case 'next-onboarding':   nextOnboarding(); break;
       case 'finish-onboarding': finishOnboarding(); break;
+      case 'ov-prev':           ovPrevMonth(); break;
+      case 'ov-next':           ovNextMonth(); break;
       case 'cal-prev':          calPrevMonth(); break;
       case 'cal-next':          calNextMonth(); break;
       case 'cal-filter':        STATE.calFilter = filter; renderCalFilters(); renderCalendar(); break;
