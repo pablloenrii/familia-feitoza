@@ -484,6 +484,15 @@ img { max-width: 100%; }
 .kpi-card--hero .kpi-value { font-size: 26px; }
 .kpi-card--hero .kpi-label { font-size: 12px; }
 
+.kpi-sparkline {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  width: 100px;
+  height: 36px;
+  opacity: .7;
+}
+
 .kpi-card--green  .kpi-value { color: var(--green); }
 .kpi-card--red    .kpi-value { color: var(--red); }
 .kpi-card--blue   .kpi-value { color: var(--blue); }
@@ -867,6 +876,19 @@ select.input { cursor: pointer; }
 }
 .filter-btn:hover  { background: var(--surface3); color: var(--text1); }
 .filter-btn.active { background: var(--orange-bg); border-color: var(--orange); color: var(--orange); }
+
+.filter-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border2);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.filter-btn--cat {
+  font-size: 11px;
+  padding: 4px 10px;
+}
 
 /* Evento do calendário */
 .evt-item {

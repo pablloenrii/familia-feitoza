@@ -191,9 +191,30 @@ function renderKPIs() {
   });
   const maiorCat = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
 
+  // Sparkline data: last 6 months saldo and patrimônio
+  const sparkSaldo = [];
+  const sparkPatrimonio = [];
+  for (let i = 5; i >= 0; i--) {
+    const sm = new Date(year, month - i, 1);
+    const smMonth = sm.getMonth();
+    const smYear = sm.getFullYear();
+    const smEvents = db.calendar.filter(e => {
+      if (!e.date) return false;
+      const d = new Date(e.date + 'T00:00:00');
+      return d.getMonth() === smMonth && d.getFullYear() === smYear;
+    });
+    const smRec = smEvents.filter(e => e.type === 'Receita').reduce((a, e) => a + Number(e.amount || 0), 0);
+    const smDes = smEvents.filter(e => e.type === 'Despesa').reduce((a, e) => a + Number(e.amount || 0), 0);
+    sparkSaldo.push(smRec - smDes);
+    sparkPatrimonio.push(
+      db.accounts.reduce((a, acc) => a + Number(acc.balance || 0), 0) +
+      db.investments.reduce((a, inv) => a + Number(inv.current || 0), 0)
+    );
+  }
+
   const kpis = [
-    { label: 'Saldo do Mês',            value: fmt(saldoMes),      icon: '💵', color: saldoMes >= 0 ? 'green' : 'red', sub: saldoMes >= 0 ? 'Positivo' : 'Negativo', hero: true },
-    { label: 'Patrimônio Líquido',      value: fmt(patrimonio),    icon: '🏛️', color: 'blue',   sub: 'Contas + Investimentos', hero: true },
+    { label: 'Saldo do Mês',            value: fmt(saldoMes),      icon: '💵', color: saldoMes >= 0 ? 'green' : 'red', sub: saldoMes >= 0 ? 'Positivo' : 'Negativo', hero: true, sparkId: 'spark-saldo', sparkData: sparkSaldo, sparkColor: saldoMes >= 0 ? '#22c55e' : '#ef4444' },
+    { label: 'Patrimônio Líquido',      value: fmt(patrimonio),    icon: '🏛️', color: 'blue',   sub: 'Contas + Investimentos', hero: true, sparkId: 'spark-patrimonio', sparkData: sparkPatrimonio, sparkColor: '#3b82f6' },
     { label: 'Receitas do Mês',         value: fmt(totalReceitas), icon: '📥', color: 'green',  sub: 'Entradas' },
     { label: 'Despesas do Mês',         value: fmt(totalDespesas), icon: '📤', color: 'red',    sub: 'Saídas' },
     { label: 'Gasto Médio Diário',      value: fmt(gastoDiario),   icon: '📅', color: 'orange', sub: isCurrentMonth ? `Baseado em ${diasPassados} dias` : `Média do mês` },
@@ -212,8 +233,39 @@ function renderKPIs() {
         <div class="kpi-value">${esc(k.value)}</div>
         <div class="kpi-sub">${esc(k.sub)}</div>
       </div>
+      ${k.hero ? `<canvas class="kpi-sparkline" id="${k.sparkId}" width="100" height="36" aria-hidden="true"></canvas>` : ''}
     </div>
   `).join('');
+
+  // Render sparklines
+  if (typeof Chart !== 'undefined') {
+    kpis.filter(k => k.hero && k.sparkId).forEach(k => {
+      const canvas = document.getElementById(k.sparkId);
+      if (!canvas) return;
+      new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: ['',''],
+          datasets: [{
+            data: k.sparkData,
+            borderColor: k.sparkColor,
+            borderWidth: 2,
+            fill: true,
+            backgroundColor: k.sparkColor + '18',
+            pointRadius: 0,
+            tension: 0.4,
+          }]
+        },
+        options: {
+          responsive: false,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: false } },
+          scales: { x: { display: false }, y: { display: false } },
+          animation: { duration: 600 },
+        }
+      });
+    });
+  }
 
   if (typeof gsap !== 'undefined') {
     gsap.from('.kpi-card', { opacity: 0, y: 16, stagger: 0.06, duration: 0.4, ease: 'power2.out' });
@@ -566,6 +618,7 @@ function renderCalendar() {
   else if (filter === 'recurring') events = events.filter(e => e.recurring || e.parentId);
   else if (filter === 'paid')     events = events.filter(e => e.paid);
   else if (filter === 'pending')  events = events.filter(e => !e.paid);
+  else if (filter.startsWith('cat:')) events = events.filter(e => e.category === filter.slice(4));
 
   if (STATE.calSearch) {
     const q = STATE.calSearch.toLowerCase();
@@ -617,13 +670,28 @@ function renderCalendar() {
 function renderCalFilters() {
   const el = document.getElementById('cal-filters');
   if (!el) return;
-  el.innerHTML = CAL_FILTERS.map(f => `
+  const calFiltersHTML = CAL_FILTERS.map(f => `
     <button class="filter-btn ${STATE.calFilter === f.value ? 'active' : ''}"
             data-action="cal-filter" data-filter="${esc(f.value)}"
             aria-pressed="${STATE.calFilter === f.value}">
       ${esc(f.label)}
     </button>
   `).join('');
+
+  // Category filters (dynamic)
+  const calCategories = [...new Set(db.calendar.map(e => e.category).filter(Boolean))];
+  const catFiltersHTML = calCategories.length ? `
+    <div class="filter-divider" aria-hidden="true"></div>
+    ${calCategories.map(cat => `
+      <button class="filter-btn filter-btn--cat ${STATE.calFilter === `cat:${cat}` ? 'active' : ''}"
+              data-action="cal-filter" data-filter="cat:${esc(cat)}"
+              aria-pressed="${STATE.calFilter === `cat:${cat}`}">
+        ${catIcon(cat)} ${esc(cat)}
+      </button>
+    `).join('')}
+  ` : '';
+
+  el.innerHTML = calFiltersHTML + catFiltersHTML;
 }
 
 function calPrevMonth() {
@@ -1829,6 +1897,9 @@ function setupEventDelegation() {
     const pages = { '1': 'overview', '2': 'cards', '3': 'calendar', '4': 'budget', '5': 'accounts', '6': 'investments', '7': 'goals' };
     if (pages[e.key]) { e.preventDefault(); goTo(pages[e.key]); return; }
     if (e.key === 'n') { e.preventDefault(); openFab(); return; }
+    if (e.key === 't') { e.preventDefault(); document.querySelector('[data-action="toggle-theme"]')?.click(); return; }
+    if (e.key === 's') { e.preventDefault(); syncWithSheets(); return; }
+    if (e.key === 'e') { e.preventDefault(); exportData(); return; }
     if (e.key === '?' || e.key === '/') { e.preventDefault(); showShortcutsModal(); return; }
   });
 

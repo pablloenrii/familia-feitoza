@@ -60,6 +60,9 @@ const DEFAULT_DB = {
 const KEYBOARD_SHORTCUTS = {
   'n':     'Novo evento (FAB)',
   'Escape':'Fechar modal',
+  't':     'Alternar tema',
+  's':     'Sincronizar com Sheets',
+  'e':     'Exportar dados (JSON)',
   '1':     'Ir para Visão Geral',
   '2':     'Ir para Cartões',
   '3':     'Ir para Calendário',
@@ -68,6 +71,7 @@ const KEYBOARD_SHORTCUTS = {
   '6':     'Ir para Investimentos',
   '7':     'Ir para Metas',
   '/':     'Buscar no Calendário',
+  '?':     'Ver atalhos de teclado',
 };
 
 // ---------- Meses em português ----------
