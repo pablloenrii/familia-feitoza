@@ -30,12 +30,28 @@ const STATE = {
 // ============================================================
 // 2. PERSISTÊNCIA
 // ============================================================
+let _persistScheduled = false;
+
 function persist() {
+  if (_persistScheduled) return;
+  _persistScheduled = true;
+  requestAnimationFrame(() => {
+    _persistScheduled = false;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    } catch (e) {
+      showToast('⚠️ Erro ao salvar: storage cheio.', 'error');
+      console.error('[FF] persist error:', e);
+    }
+  });
+}
+
+function persistFlush() {
+  _persistScheduled = false;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   } catch (e) {
-    showToast('⚠️ Erro ao salvar: storage cheio.', 'error');
-    console.error('[FF] persist error:', e);
+    console.error('[FF] persistFlush error:', e);
   }
 }
 
@@ -82,7 +98,7 @@ function goTo(page) {
     cards:       () => { renderCards(); renderInsightCards(); },
     calendar:    () => { renderCalendar(); renderInsightCalendar(); renderChartCalendar(); },
     budget:      () => { renderBudgetVisual(); renderInsightBudget(); },
-    accounts:    () => { renderAccounts(); renderInsightAccounts(); renderChartAccounts(); },
+    accounts:    () => { renderAccounts(); renderTransfers(); renderInsightAccounts(); renderChartAccounts(); },
     investments: () => { renderInvestments(); renderInsightInvestments(); renderChartInvestments(); },
     goals:       () => { renderGoals(); renderInsightGoals(); },
   };
@@ -95,7 +111,6 @@ function goTo(page) {
 // 4. OVERVIEW
 // ============================================================
 function renderOverview() {
-  // Atualiza label do mês selecionado
   const label = document.getElementById('ov-month-label');
   if (label) label.textContent = fmtMonth(STATE.ovMonth, STATE.ovYear);
   renderAlerts();
@@ -103,6 +118,7 @@ function renderOverview() {
   renderUpcomingExpenses();
   renderOverviewGoals();
   renderOverviewBudget();
+  renderOverviewComparison();
   renderInsightOverview();
   renderChartPatrimonio();
 }
@@ -163,7 +179,7 @@ function renderKPIs() {
   const el = document.getElementById('overview-kpis');
   if (!el) return;
   el.innerHTML = kpis.map(k => `
-    <div class="kpi-card kpi-card--${esc(k.color)}" role="figure" aria-label="${esc(k.label)}: ${esc(k.value)}">
+    <div class="kpi-card kpi-card--${esc(k.color)}" role="figure" aria-label="${esc(k.label)}: ${esc(k.value)}" title="${esc(k.label)}: ${esc(k.value)} — ${esc(k.sub)}">
       <div class="kpi-icon" aria-hidden="true">${k.icon}</div>
       <div class="kpi-body">
         <div class="kpi-label">${esc(k.label)}</div>
@@ -249,6 +265,68 @@ function renderOverviewBudget() {
       </div>
     </div>
   `).join('');
+}
+
+function getMonthTotals(month, year) {
+  const events = db.calendar.filter(e => {
+    if (!e.date) return false;
+    const d = new Date(e.date + 'T00:00:00');
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+  const receitas = events.filter(e => e.type === 'Receita').reduce((a, e) => a + Number(e.amount || 0), 0);
+  const despesas = events.filter(e => e.type === 'Despesa').reduce((a, e) => a + Number(e.amount || 0), 0);
+  return { receitas, despesas, saldo: receitas - despesas };
+}
+
+function renderOverviewComparison() {
+  const el = document.getElementById('overview-comparison');
+  if (!el) return;
+
+  const curMonth = STATE.ovMonth;
+  const curYear  = STATE.ovYear;
+  let prevMonth = curMonth - 1;
+  let prevYear  = curYear;
+  if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+
+  const cur  = getMonthTotals(curMonth, curYear);
+  const prev = getMonthTotals(prevMonth, prevYear);
+
+  function pctChange(curVal, prevVal) {
+    if (prevVal === 0) return curVal > 0 ? '+∞' : '0%';
+    const change = ((curVal - prevVal) / Math.abs(prevVal)) * 100;
+    return `${change >= 0 ? '+' : ''}${change.toFixed(0)}%`;
+  }
+  function arrow(curVal, prevVal) {
+    return curVal > prevVal ? '↑' : curVal < prevVal ? '↓' : '→';
+  }
+  function changeColor(curVal, prevVal, invert) {
+    const up = curVal > prevVal;
+    if (invert) return up ? 'var(--red)' : 'var(--green)';
+    return up ? 'var(--green)' : 'var(--red)';
+  }
+
+  const rows = [
+    { label: 'Receitas',  cur: cur.receitas,  prev: prev.receitas,  invert: false },
+    { label: 'Despesas',  cur: cur.despesas,  prev: prev.despesas,  invert: true },
+    { label: 'Saldo',     cur: cur.saldo,     prev: prev.saldo,     invert: false },
+  ];
+
+  el.innerHTML = `
+    <div class="comparison-header">
+      <span class="muted">${MONTHS_PT[prevMonth]} ${prevYear}</span>
+      <span class="muted">→</span>
+      <span class="muted">${MONTHS_PT[curMonth]} ${curYear}</span>
+    </div>
+    ${rows.map(r => `
+      <div class="comparison-row">
+        <span class="comparison-label">${r.label}</span>
+        <span class="comparison-prev">${fmt(r.prev)}</span>
+        <span class="comparison-arrow" style="color:${changeColor(r.cur, r.prev, r.invert)}">${arrow(r.cur, r.prev)}</span>
+        <span class="comparison-cur">${fmt(r.cur)}</span>
+        <span class="comparison-pct" style="color:${changeColor(r.cur, r.prev, r.invert)}">${pctChange(r.cur, r.prev)}</span>
+      </div>
+    `).join('')}
+  `;
 }
 
 // ============================================================
@@ -382,18 +460,35 @@ function addCalendarEvent() {
   const category  = document.getElementById('evt-category')?.value || 'Outros';
   const date      = document.getElementById('evt-date')?.value;
   const recurring = document.getElementById('evt-recurring')?.checked || false;
+  const installmentTotal = Number(document.getElementById('evt-installment-total')?.value) || 1;
+  const installmentIndex = Number(document.getElementById('evt-installment-index')?.value) || 1;
 
   const errors = validateEvent({ title, date, amount, type });
   if (errors.length) { showToast(`❌ ${errors[0]}`, 'error'); return; }
 
-  const evt = { id: uid(), title, amount, type, category, date, recurring, parentId: null, createdAt: new Date().toISOString() };
+  const evt = {
+    id: uid(), title, amount, type, category, date, recurring,
+    installmentTotal: Math.max(1, installmentTotal),
+    installmentIndex: Math.max(1, Math.min(installmentIndex, installmentTotal)),
+    parentId: null, createdAt: new Date().toISOString(),
+  };
   db.calendar.push(evt);
-  if (recurring) generateRecurringFor(evt);
+
+  if (recurring) {
+    generateRecurringFor(evt);
+  } else if (installmentTotal > 1) {
+    generateInstallmentFuture(evt);
+  }
+
   saveAll();
   renderCalendar();
   renderInsightCalendar();
   renderChartCalendar();
   clearForm(['evt-title', 'evt-amount', 'evt-type', 'evt-category', 'evt-date', 'evt-recurring']);
+  const instTotalEl = document.getElementById('evt-installment-total');
+  const instIndexEl = document.getElementById('evt-installment-index');
+  if (instTotalEl) instTotalEl.value = '1';
+  if (instIndexEl) instIndexEl.value = '1';
   showToast('✅ Evento adicionado!');
 }
 
@@ -409,12 +504,24 @@ function removeCalendarEvent(id) {
   });
 }
 
+function togglePaid(id) {
+  const evt = db.calendar.find(e => e.id === id);
+  if (!evt) return;
+  evt.paid = !evt.paid;
+  saveAll();
+  renderCalendar();
+  renderInsightCalendar();
+  showToast(evt.paid ? '✅ Marcado como pago' : '⏳ Marcado como pendente');
+}
+
 function renderCalendar() {
   const el = document.getElementById('calendar-list');
   if (!el) return;
 
   const monthLabel = document.getElementById('cal-month-label');
   if (monthLabel) monthLabel.textContent = fmtMonth(STATE.calMonth, STATE.calYear);
+
+  populateCategorySelect('evt-category');
 
   let events = db.calendar.filter(e => {
     if (!e.date) return false;
@@ -430,6 +537,8 @@ function renderCalendar() {
   else if (filter === 'overdue')  events = events.filter(e => isPast(e.date) && e.type === 'Despesa');
   else if (['Receita','Despesa','Meta'].includes(filter)) events = events.filter(e => e.type === filter);
   else if (filter === 'recurring') events = events.filter(e => e.recurring || e.parentId);
+  else if (filter === 'paid')     events = events.filter(e => e.paid);
+  else if (filter === 'pending')  events = events.filter(e => !e.paid);
 
   if (STATE.calSearch) {
     const q = STATE.calSearch.toLowerCase();
@@ -444,26 +553,29 @@ function renderCalendar() {
   }
 
   el.innerHTML = events.map(e => {
-    const overdue = e.type === 'Despesa' && isPast(e.date) && !isToday(e.date);
+    const overdue = e.type === 'Despesa' && isPast(e.date) && !isToday(e.date) && !e.paid;
     return `
-      <div class="evt-item evt-item--${esc(e.type)} ${overdue ? 'evt-item--overdue' : ''}" role="listitem">
+      <div class="evt-item evt-item--${esc(e.type)} ${overdue ? 'evt-item--overdue' : ''} ${e.paid ? 'evt-item--paid' : ''}" role="listitem">
         <div class="evt-item-left">
           <span class="type-dot type-dot--${esc(e.type)}" aria-hidden="true"></span>
           <div class="evt-item-info">
             <div class="evt-item-title">
               ${esc(e.title)}
               ${(e.recurring || e.parentId) ? '<span class="recurring-badge" title="Recorrente">🔄</span>' : ''}
+              ${e.installmentTotal > 1 ? `<span class="recurring-badge" title="Parcela ${e.installmentIndex}/${e.installmentTotal}">${e.installmentIndex}/${e.installmentTotal}</span>` : ''}
             </div>
             <div class="evt-item-meta">
               <span class="cat-badge" style="--cat-color:${catColor(e.category)};">${catIcon(e.category)} ${esc(e.category || 'Outros')}</span>
               <span class="muted">${fmtDate(e.date)}</span>
               ${overdue ? '<span class="overdue-badge">Atrasado</span>' : ''}
+              ${e.paid ? '<span class="overdue-badge" style="background:var(--green-bg);color:var(--green)">Pago</span>' : ''}
             </div>
           </div>
         </div>
         <div class="evt-item-right">
           <span class="evt-amount ${e.type === 'Receita' ? 'positive' : ''}">${fmt(e.amount)}</span>
-          <div class="item-actions">
+          <div class="item-actions" style="opacity:1">
+            <button class="btn-edit" data-action="toggle-paid" data-id="${e.id}" aria-label="${e.paid ? 'Marcar como pendente' : 'Marcar como pago'}" title="${e.paid ? 'Marcar como pendente' : 'Marcar como pago'}">${e.paid ? '⏳' : '✅'}</button>
             <button class="btn-edit" data-action="edit" data-type="calendar" data-id="${e.id}" aria-label="Editar ${esc(e.title)}">✏️</button>
             <button class="btn-remove" data-action="remove-calendar" data-id="${e.id}" aria-label="Remover ${esc(e.title)}">✕</button>
           </div>
@@ -515,12 +627,15 @@ function renderInsightCalendar() {
   const despesas = events.filter(e => e.type === 'Despesa').reduce((a, e) => a + Number(e.amount || 0), 0);
   const saldo    = receitas - despesas;
   const recorr   = events.filter(e => e.recurring || e.parentId).length;
+  const pagas    = events.filter(e => e.type === 'Despesa' && e.paid).reduce((a, e) => a + Number(e.amount || 0), 0);
+  const pendentes = despesas - pagas;
   el.innerHTML = insightHTML([
     { label: 'Receitas',    value: fmt(receitas),         sub: `${events.filter(e => e.type === 'Receita').length} eventos` },
     { label: 'Despesas',    value: fmt(despesas),         sub: `${events.filter(e => e.type === 'Despesa').length} eventos` },
     { label: 'Saldo',       value: fmt(saldo),            sub: saldo >= 0 ? 'Positivo ✅' : 'Negativo ⚠️' },
+    { label: 'Pagas',       value: fmt(pagas),            sub: 'despesas quitadas' },
+    { label: 'Pendentes',   value: fmt(pendentes),        sub: 'aguardando pagamento' },
     { label: 'Recorrentes', value: String(recorr),        sub: 'automáticos' },
-    { label: 'Total',       value: String(events.length), sub: 'eventos no mês' },
   ]);
 }
 
@@ -592,6 +707,103 @@ function renderInsightAccounts() {
     { label: 'Média por Conta', value: fmt(total / db.accounts.length),               sub: 'média simples' },
     { label: 'Contas Neg.',     value: String(db.accounts.filter(a => Number(a.balance) < 0).length), sub: 'saldo negativo' },
   ]);
+}
+
+// ============================================================
+// 8b. TRANSFERÊNCIAS
+// ============================================================
+function populateTransferSelects() {
+  const fromSel = document.getElementById('tf-from');
+  const toSel   = document.getElementById('tf-to');
+  if (!fromSel || !toSel) return;
+  const opts = db.accounts.map(a => `<option value="${a.id}">${esc(a.name)} (${fmt(a.balance)})</option>`).join('');
+  const placeholder = '<option value="">Selecione...</option>';
+  fromSel.innerHTML = placeholder + opts;
+  toSel.innerHTML   = placeholder + opts;
+}
+
+function addTransfer() {
+  const fromId = document.getElementById('tf-from')?.value;
+  const toId   = document.getElementById('tf-to')?.value;
+  const amount = Number(document.getElementById('tf-amount')?.value) || 0;
+  const date   = document.getElementById('tf-date')?.value;
+
+  if (!fromId) { showToast('❌ Selecione a conta de origem', 'error'); return; }
+  if (!toId)   { showToast('❌ Selecione a conta de destino', 'error'); return; }
+  if (fromId === toId) { showToast('❌ Contas devem ser diferentes', 'error'); return; }
+  if (amount <= 0) { showToast('❌ Informe um valor válido', 'error'); return; }
+  if (!date) { showToast('❌ Informe a data', 'error'); return; }
+
+  const fromAcc = db.accounts.find(a => a.id === Number(fromId));
+  const toAcc   = db.accounts.find(a => a.id === Number(toId));
+  if (!fromAcc || !toAcc) { showToast('❌ Conta não encontrada', 'error'); return; }
+
+  fromAcc.balance = Number(fromAcc.balance) - amount;
+  toAcc.balance   = Number(toAcc.balance) + amount;
+
+  db.transfers.push({
+    id: uid(), fromId: Number(fromId), toId: Number(toId),
+    fromName: fromAcc.name, toName: toAcc.name,
+    amount, date, createdAt: new Date().toISOString(),
+  });
+
+  saveAll();
+  renderAccounts();
+  renderTransfers();
+  renderInsightAccounts();
+  renderChartAccounts();
+  renderChartPatrimonio();
+  clearForm(['tf-from', 'tf-to', 'tf-amount', 'tf-date']);
+  showToast(`✅ Transferência de ${fmt(amount)} realizada!`);
+}
+
+function removeTransfer(id) {
+  const tf = db.transfers.find(t => t.id === id);
+  showConfirm(`Reverter transferência de ${fmt(tf?.amount || 0)}?`, () => {
+    if (tf) {
+      const fromAcc = db.accounts.find(a => a.id === tf.fromId);
+      const toAcc   = db.accounts.find(a => a.id === tf.toId);
+      if (fromAcc) fromAcc.balance = Number(fromAcc.balance) + tf.amount;
+      if (toAcc)   toAcc.balance   = Number(toAcc.balance) - tf.amount;
+    }
+    db.transfers = db.transfers.filter(t => t.id !== id);
+    saveAll();
+    renderAccounts();
+    renderTransfers();
+    renderInsightAccounts();
+    renderChartAccounts();
+    renderChartPatrimonio();
+    showToast('🗑️ Transferência revertida.');
+  });
+}
+
+function renderTransfers() {
+  const el = document.getElementById('transfers-list');
+  if (!el) return;
+  const items = db.transfers.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
+  if (!items.length) {
+    el.innerHTML = '<div class="empty-state"><span>🔄</span><p>Nenhuma transferência recente</p></div>';
+    return;
+  }
+  el.innerHTML = items.map(t => `
+    <div class="evt-item" role="listitem">
+      <div class="evt-item-left">
+        <span class="type-dot" style="background:var(--blue)" aria-hidden="true"></span>
+        <div class="evt-item-info">
+          <div class="evt-item-title">${esc(t.fromName)} → ${esc(t.toName)}</div>
+          <div class="evt-item-meta">
+            <span class="muted">${fmtDate(t.date)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="evt-item-right">
+        <span class="evt-amount" style="color:var(--blue)">${fmt(t.amount)}</span>
+        <div class="item-actions" style="opacity:1">
+          <button class="btn-remove" data-action="remove-transfer" data-id="${t.id}" aria-label="Reverter transferência">✕</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
 }
 
 // ============================================================
@@ -768,10 +980,14 @@ function renderInsightGoals() {
 // 11. BUDGET
 // ============================================================
 function updateBudget() {
-  const income = Number(document.getElementById('budget-income')?.value) || db.income;
-  const needs  = Number(document.getElementById('budget-needs')?.value)  || db.budget.needs;
-  const wants  = Number(document.getElementById('budget-wants')?.value)  || db.budget.wants;
-  const invest = Number(document.getElementById('budget-invest')?.value) || db.budget.invest;
+  const incVal = document.getElementById('budget-income')?.value;
+  const nVal = document.getElementById('budget-needs')?.value;
+  const wVal = document.getElementById('budget-wants')?.value;
+  const iVal = document.getElementById('budget-invest')?.value;
+  const income = incVal !== '' && incVal !== undefined ? Number(incVal) : db.income;
+  const needs  = nVal  !== '' && nVal  !== undefined ? Number(nVal)  : db.budget.needs;
+  const wants  = wVal  !== '' && wVal  !== undefined ? Number(wVal)  : db.budget.wants;
+  const invest = iVal  !== '' && iVal  !== undefined ? Number(iVal)  : db.budget.invest;
   const total  = needs + wants + invest;
 
   if (total !== 100) { showToast(`❌ Percentuais devem somar 100% (atual: ${total}%)`, 'error'); return; }
@@ -865,10 +1081,23 @@ function renderInsightOverview() {
 // ============================================================
 // 12. GRÁFICOS
 // ============================================================
+function updateOrCreateChart(canvas, config) {
+  if (canvas._chartInstance) {
+    const chart = canvas._chartInstance;
+    chart.data = config.data;
+    if (config.options) {
+      chart.options = config.options;
+    }
+    chart.update('none');
+    return chart;
+  }
+  canvas._chartInstance = new Chart(canvas, config);
+  return canvas._chartInstance;
+}
+
 function renderChartCalendar() {
   const canvas = document.getElementById('chart-category');
   if (!canvas) return;
-  destroyChart(canvas);
 
   const events = db.calendar.filter(e => {
     if (e.type !== 'Despesa' || !e.date) return false;
@@ -881,10 +1110,14 @@ function renderChartCalendar() {
   const labels = Object.keys(catMap);
   const data   = Object.values(catMap);
 
-  if (!labels.length) { canvas.style.display = 'none'; return; }
-  canvas.style.display = '';
+  if (!labels.length) {
+    if (canvas._chartInstance) { canvas._chartInstance.destroy(); canvas._chartInstance = null; }
+    showChartEmpty(canvas, 'Sem despesas neste mês');
+    return;
+  }
+  hideChartEmpty(canvas);
 
-  canvas._chartInstance = new Chart(canvas, {
+  updateOrCreateChart(canvas, {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: labels.map(l => catColor(l)), borderWidth: 0 }] },
     options: {
@@ -900,11 +1133,14 @@ function renderChartCalendar() {
 function renderChartAccounts() {
   const canvas = document.getElementById('chart-accounts');
   if (!canvas) return;
-  destroyChart(canvas);
-  if (!db.accounts.length) { canvas.style.display = 'none'; return; }
-  canvas.style.display = '';
+  if (!db.accounts.length) {
+    if (canvas._chartInstance) { canvas._chartInstance.destroy(); canvas._chartInstance = null; }
+    showChartEmpty(canvas, 'Cadastre contas para ver o gráfico');
+    return;
+  }
+  hideChartEmpty(canvas);
 
-  canvas._chartInstance = new Chart(canvas, {
+  updateOrCreateChart(canvas, {
     type: 'bar',
     data: {
       labels: db.accounts.map(a => a.name),
@@ -926,11 +1162,14 @@ function renderChartAccounts() {
 function renderChartInvestments() {
   const canvas = document.getElementById('chart-investments');
   if (!canvas) return;
-  destroyChart(canvas);
-  if (!db.investments.length) { canvas.style.display = 'none'; return; }
-  canvas.style.display = '';
+  if (!db.investments.length) {
+    if (canvas._chartInstance) { canvas._chartInstance.destroy(); canvas._chartInstance = null; }
+    showChartEmpty(canvas, 'Cadastre investimentos para ver o gráfico');
+    return;
+  }
+  hideChartEmpty(canvas);
 
-  canvas._chartInstance = new Chart(canvas, {
+  updateOrCreateChart(canvas, {
     type: 'bar',
     data: {
       labels: db.investments.map(i => i.name),
@@ -954,27 +1193,39 @@ function renderChartInvestments() {
 function renderChartPatrimonio() {
   const canvas = document.getElementById('chart-patrimonio');
   if (!canvas) return;
-  destroyChart(canvas);
 
   const contas  = db.accounts.reduce((a, acc) => a + Number(acc.balance || 0), 0);
   const invests = db.investments.reduce((a, inv) => a + Number(inv.current || 0), 0);
   const cartoes = db.cards.reduce((a, c) => a + Number(c.used || 0), 0);
+  const ativos  = contas + invests;
 
-  if (contas === 0 && invests === 0) { canvas.style.display = 'none'; return; }
-  canvas.style.display = '';
+  if (ativos === 0 && cartoes === 0) {
+    if (canvas._chartInstance) { canvas._chartInstance.destroy(); canvas._chartInstance = null; }
+    showChartEmpty(canvas, 'Cadastre contas ou investimentos para ver o patrimônio');
+    return;
+  }
+  hideChartEmpty(canvas);
 
-  canvas._chartInstance = new Chart(canvas, {
-    type: 'doughnut',
+  const labels = ['Ativos', 'Passivos'];
+  const data   = [Math.max(ativos, 0), Math.max(cartoes, 0)];
+  const colors = ['#22c55e', '#ef4444'];
+
+  updateOrCreateChart(canvas, {
+    type: 'bar',
     data: {
-      labels: ['Contas', 'Investimentos', 'Dívidas'],
-      datasets: [{ data: [Math.max(contas, 0), Math.max(invests, 0), Math.max(cartoes, 0)],
-        backgroundColor: ['#22c55e', '#f97316', '#ef4444'], borderWidth: 0 }],
+      labels,
+      datasets: [{ data, backgroundColor: colors, borderRadius: 6, borderSkipped: false }],
     },
     options: {
       responsive: true, maintainAspectRatio: true,
+      indexAxis: 'y',
       plugins: {
-        legend: { position: 'right', labels: { color: '#a1a1aa', font: { family: 'Inter', size: 12 }, boxWidth: 12, padding: 12 } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${fmt(ctx.parsed)}` } },
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${fmt(ctx.parsed.x)}` } },
+      },
+      scales: {
+        x: { ticks: { color: '#a1a1aa', font: { family: 'Inter' }, callback: v => fmt(v) }, grid: { color: '#27272a' } },
+        y: { ticks: { color: '#a1a1aa', font: { family: 'Inter', weight: 600 } }, grid: { display: false } },
       },
     },
   });
@@ -1005,16 +1256,28 @@ function saveFab() {
   const category  = document.getElementById('fab-category')?.value || 'Outros';
   const date      = document.getElementById('fab-date')?.value;
   const recurring = document.getElementById('fab-recurring')?.checked || false;
+  const installmentTotal = Number(document.getElementById('fab-installments')?.value) || 1;
 
   const errors = validateEvent({ title, date, amount, type });
   if (errors.length) { showToast(`❌ ${errors[0]}`, 'error'); return; }
 
-  const evt = { id: uid(), title, amount, type, category, date, recurring, parentId: null, createdAt: new Date().toISOString() };
+  const evt = {
+    id: uid(), title, amount, type, category, date, recurring,
+    installmentTotal: Math.max(1, installmentTotal),
+    installmentIndex: 1,
+    parentId: null, createdAt: new Date().toISOString(),
+  };
   db.calendar.push(evt);
-  if (recurring) generateRecurringFor(evt);
+  if (recurring) {
+    generateRecurringFor(evt);
+  } else if (installmentTotal > 1) {
+    generateInstallmentFuture(evt);
+  }
   saveAll();
   closeFab();
   clearForm(['fab-title', 'fab-amount', 'fab-type', 'fab-category', 'fab-date', 'fab-recurring']);
+  const instEl = document.getElementById('fab-installments');
+  if (instEl) instEl.value = '1';
   if (STATE.page === 'calendar') { renderCalendar(); renderInsightCalendar(); renderChartCalendar(); }
   if (STATE.page === 'overview') renderOverview();
   showToast('✅ Registro adicionado!');
@@ -1045,6 +1308,8 @@ function openEditModal(type, id) {
       <div class="field-group"><label class="field-label">Categoria</label><select id="edit-category" class="input">${catOptions}</select></div>
       <div class="field-group"><label class="field-label">Data</label><input id="edit-date" class="input" type="date" value="${esc(e.date)}"></div>
       <div class="field-group field-group--full"><label class="toggle-label"><input id="edit-recurring" type="checkbox" ${e.recurring ? 'checked' : ''}><span class="toggle-track"></span><span>Recorrente mensal</span></label></div>
+      <div class="field-group"><label class="field-label">Parcela</label><input id="edit-installment-index" class="input" type="number" value="${e.installmentIndex || 1}" min="1" max="${e.installmentTotal || 60}"></div>
+      <div class="field-group"><label class="field-label">Total de parcelas</label><input id="edit-installment-total" class="input" type="number" value="${e.installmentTotal || 1}" min="1" max="60"></div>
     </div>`;
   } else if (type === 'card') {
     const c = db.cards.find(x => x.id === id);
@@ -1101,32 +1366,44 @@ function saveEdit() {
     evt.category  = document.getElementById('edit-category')?.value         || evt.category;
     evt.date      = document.getElementById('edit-date')?.value             || evt.date;
     evt.recurring = document.getElementById('edit-recurring')?.checked      || false;
+    const instIdx = document.getElementById('edit-installment-index')?.value;
+    const instTot = document.getElementById('edit-installment-total')?.value;
+    if (instIdx !== undefined && instIdx !== '') evt.installmentIndex = Number(instIdx);
+    if (instTot !== undefined && instTot !== '') evt.installmentTotal = Number(instTot);
   } else if (type === 'card') {
     const card = db.cards.find(c => c.id === id);
     if (!card) return;
     card.name  = document.getElementById('edit-name')?.value.trim() || card.name;
-    card.limit = Number(document.getElementById('edit-limit')?.value) || card.limit;
-    card.used  = Number(document.getElementById('edit-used')?.value)  || 0;
-    card.due   = Number(document.getElementById('edit-due')?.value)   || card.due;
+    const limitVal = document.getElementById('edit-limit')?.value;
+    card.limit = limitVal !== '' && limitVal !== undefined ? Number(limitVal) : card.limit;
+    const usedVal = document.getElementById('edit-used')?.value;
+    card.used  = usedVal !== '' && usedVal !== undefined ? Number(usedVal) : card.used;
+    const dueVal = document.getElementById('edit-due')?.value;
+    card.due   = dueVal !== '' && dueVal !== undefined ? Number(dueVal) : card.due;
   } else if (type === 'account') {
     const acc = db.accounts.find(a => a.id === id);
     if (!acc) return;
     acc.name    = document.getElementById('edit-name')?.value.trim()    || acc.name;
     acc.type    = document.getElementById('edit-type')?.value           || acc.type;
-    acc.balance = Number(document.getElementById('edit-balance')?.value) ?? acc.balance;
+    const balVal = document.getElementById('edit-balance')?.value;
+    acc.balance = balVal !== '' && balVal !== undefined ? Number(balVal) : acc.balance;
   } else if (type === 'investment') {
     const inv = db.investments.find(i => i.id === id);
     if (!inv) return;
     inv.name    = document.getElementById('edit-name')?.value.trim()     || inv.name;
     inv.type    = document.getElementById('edit-inv-type')?.value.trim() || inv.type;
-    inv.initial = Number(document.getElementById('edit-initial')?.value) || inv.initial;
-    inv.current = Number(document.getElementById('edit-current')?.value) || inv.current;
+    const initVal = document.getElementById('edit-initial')?.value;
+    inv.initial = initVal !== '' && initVal !== undefined ? Number(initVal) : inv.initial;
+    const currVal = document.getElementById('edit-current')?.value;
+    inv.current = currVal !== '' && currVal !== undefined ? Number(currVal) : inv.current;
   } else if (type === 'goal') {
     const goal = db.goals.find(g => g.id === id);
     if (!goal) return;
     goal.name     = document.getElementById('edit-name')?.value.trim()    || goal.name;
-    goal.target   = Number(document.getElementById('edit-target')?.value) || goal.target;
-    goal.saved    = Number(document.getElementById('edit-saved')?.value)  || 0;
+    const tgtVal = document.getElementById('edit-target')?.value;
+    goal.target   = tgtVal !== '' && tgtVal !== undefined ? Number(tgtVal) : goal.target;
+    const savVal = document.getElementById('edit-saved')?.value;
+    goal.saved    = savVal !== '' && savVal !== undefined ? Number(savVal) : goal.saved;
     goal.deadline = document.getElementById('edit-deadline')?.value       || null;
   }
 
@@ -1238,12 +1515,46 @@ function generateRecurringFor(template, targetMonth, targetYear) {
   if (exists) return;
 
   const [,, day] = (template.date || '').split('-');
-  const newDate  = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${day || '01'}`;
+  const diasDoMes = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const dia = Math.min(Number(day) || 1, diasDoMes);
+  const newDate  = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
   db.calendar.push({
     id: uid(), title: template.title, amount: template.amount,
     type: template.type, category: template.category, date: newDate,
-    recurring: false, parentId: template.id, createdAt: new Date().toISOString(),
+    recurring: false, parentId: template.id,
+    installmentTotal: template.installmentTotal || 1,
+    installmentIndex: template.installmentIndex || 1,
+    createdAt: new Date().toISOString(),
   });
+}
+
+function generateInstallmentFuture(template) {
+  const total = template.installmentTotal || 1;
+  if (total <= 1) return;
+
+  const [y, m, d] = (template.date || '').split('-').map(Number);
+  for (let i = template.installmentIndex + 1; i <= total; i++) {
+    const futureMonth = m - 1 + (i - template.installmentIndex);
+    const futureYear  = y + Math.floor(futureMonth / 12);
+    const futureMonthIdx = ((futureMonth % 12) + 12) % 12;
+    const diasDoMes = new Date(futureYear, futureMonthIdx + 1, 0).getDate();
+    const dia = Math.min(d || 1, diasDoMes);
+    const newDate = `${futureYear}-${String(futureMonthIdx + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+
+    const exists = db.calendar.some(e =>
+      e.parentId === template.id &&
+      e.installmentIndex === i
+    );
+    if (exists) continue;
+
+    db.calendar.push({
+      id: uid(), title: template.title, amount: template.amount,
+      type: template.type, category: template.category, date: newDate,
+      recurring: false, parentId: template.id,
+      installmentTotal: total, installmentIndex: i,
+      createdAt: new Date().toISOString(),
+    });
+  }
 }
 
 // ============================================================
@@ -1330,6 +1641,28 @@ function populateCategorySelect(selectId) {
     CATEGORIES.map(c => `<option value="${esc(c.value)}">${c.icon} ${esc(c.value)}</option>`).join('');
 }
 
+function showChartEmpty(canvas, msg) {
+  canvas.style.display = 'none';
+  const wrap = canvas.parentElement;
+  if (!wrap) return;
+  let placeholder = wrap.querySelector('.chart-empty');
+  if (!placeholder) {
+    placeholder = document.createElement('div');
+    placeholder.className = 'chart-empty';
+    wrap.appendChild(placeholder);
+  }
+  placeholder.textContent = msg;
+  placeholder.style.display = '';
+}
+
+function hideChartEmpty(canvas) {
+  canvas.style.display = '';
+  const wrap = canvas.parentElement;
+  if (!wrap) return;
+  const placeholder = wrap.querySelector('.chart-empty');
+  if (placeholder) placeholder.style.display = 'none';
+}
+
 function insightHTML(items) {
   return items.map(i => `
     <div class="insight-item">
@@ -1345,7 +1678,11 @@ function toggleCollapsible(bodyId) {
   const header = document.querySelector(`[data-toggle="${bodyId}"]`);
   if (!body || !header) return;
   const isOpen = !body.hidden;
-  body.hidden  = isOpen;
+  if (isOpen) {
+    body.hidden = true;
+  } else {
+    body.removeAttribute('hidden');
+  }
   header.setAttribute('aria-expanded', String(!isOpen));
   const arrow = header.querySelector('.collapsible-arrow');
   if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
@@ -1404,6 +1741,7 @@ function setupEventDelegation() {
       case 'cal-filter':        STATE.calFilter = filter; renderCalFilters(); renderCalendar(); break;
       case 'add-calendar-event':addCalendarEvent(); break;
       case 'remove-calendar':   removeCalendarEvent(id); break;
+      case 'toggle-paid':       togglePaid(id); break;
       case 'open-add-event':    toggleCollapsible('cal-form-body'); break;
       case 'add-card':          addCard(); break;
       case 'remove-card':       removeCard(id); break;
@@ -1411,6 +1749,9 @@ function setupEventDelegation() {
       case 'add-account':       addAccount(); break;
       case 'remove-account':    removeAccount(id); break;
       case 'open-add-account':  toggleCollapsible('account-form-body'); break;
+      case 'add-transfer':      addTransfer(); break;
+      case 'remove-transfer':   removeTransfer(id); break;
+      case 'open-add-transfer': toggleCollapsible('transfer-form-body'); populateTransferSelects(); break;
       case 'add-investment':    addInvestment(); break;
       case 'remove-investment': removeInvestment(id); break;
       case 'open-add-investment':toggleCollapsible('invest-form-body'); break;

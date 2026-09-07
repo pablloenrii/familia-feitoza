@@ -275,6 +275,15 @@ img { max-width: 100%; }
   transition: color var(--transition), border-color var(--transition);
   white-space: nowrap;
 }
+.sync-badge--syncing {
+  border-color: var(--orange);
+  color: var(--orange);
+  animation: pulse 1.5s ease infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
 
 .icon-btn {
   width: 32px; height: 32px;
@@ -670,6 +679,10 @@ select.input { cursor: pointer; }
   opacity: 1;
 }
 
+@media (max-width: 768px) {
+  .item-actions { opacity: 1; }
+}
+
 /* ============================================================
    19. COLLAPSIBLES
 ============================================================ */
@@ -690,7 +703,21 @@ select.input { cursor: pointer; }
 
 .collapsible-arrow { font-size: 10px; transition: transform var(--transition); }
 
-.collapsible-body { padding-top: 0; }
+.collapsible-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-slow);
+}
+.collapsible-body[hidden] {
+  display: grid;
+  grid-template-rows: 0fr;
+}
+.collapsible-body:not([hidden]) {
+  grid-template-rows: 1fr;
+}
+.collapsible-body > * {
+  overflow: hidden;
+}
 
 /* ============================================================
    20. CALENDÁRIO
@@ -758,6 +785,8 @@ select.input { cursor: pointer; }
 }
 .evt-item:hover { border-color: var(--border2); background: var(--surface2); }
 .evt-item--overdue { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.04); }
+.evt-item--paid { opacity: .65; }
+.evt-item--paid .evt-item-title { text-decoration: line-through; }
 
 .evt-item-left {
   display: flex;
@@ -1167,6 +1196,18 @@ select.input { cursor: pointer; }
 }
 .chart-wrap--small { max-height: 220px; }
 
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text3);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  min-height: 120px;
+}
+
 /* ============================================================
    32. ONBOARDING DOTS
 ============================================================ */
@@ -1282,7 +1323,36 @@ select.input { cursor: pointer; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text4); }
 
-/* Color-mix fallback para navegadores sem suporte */
+/* ============================================================
+   39. COMPARATIVO MÊS A MÊS
+============================================================ */
+.comparison-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.comparison-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.comparison-row:last-child { border-bottom: none; }
+
+.comparison-label { font-size: 13px; font-weight: 600; min-width: 80px; }
+.comparison-prev  { font-size: 13px; color: var(--text3); min-width: 100px; text-align: right; }
+.comparison-arrow { font-size: 14px; font-weight: 700; }
+.comparison-cur   { font-size: 14px; font-weight: 700; min-width: 100px; }
+.comparison-pct   { font-size: 12px; font-weight: 700; min-width: 50px; text-align: right; }
+
+@media (max-width: 768px) {
+  .comparison-row { gap: 6px; }
+  .comparison-prev, .comparison-cur { min-width: 80px; font-size: 12px; }
+}
 @supports not (color: color-mix(in srgb, red 50%, blue)) {
   .cat-badge { background: var(--orange-bg); color: var(--orange); }
 }

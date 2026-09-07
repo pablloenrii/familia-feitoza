@@ -7,8 +7,8 @@
   <title>Familia Feitoza · Dashboard Financeiro</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" crossorigin="anonymous"></script>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body data-theme="dark">
@@ -133,6 +133,12 @@
           </div>
         </div>
 
+        <!-- Comparativo Mês a Mês -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">📊 Comparativo Mês a Mês</span></div>
+          <div id="overview-comparison"></div>
+        </div>
+
         <!-- Inteligência Financeira -->
         <div class="card">
           <div class="card-header"><span class="card-title">🧠 Inteligência Financeira</span></div>
@@ -252,6 +258,14 @@
                   <span>Recorrente mensal</span>
                 </label>
               </div>
+              <div class="field-group">
+                <label for="evt-installment-total" class="field-label">Total de parcelas</label>
+                <input id="evt-installment-total" class="input" type="number" placeholder="1" min="1" max="60" value="1">
+              </div>
+              <div class="field-group">
+                <label for="evt-installment-index" class="field-label">Parcela atual</label>
+                <input id="evt-installment-index" class="input" type="number" placeholder="1" min="1" max="60" value="1">
+              </div>
               <button class="btn-primary" data-action="add-calendar-event">Salvar Evento</button>
             </div>
           </div>
@@ -315,6 +329,7 @@
             <p class="sec-sub">Gerencie seus saldos</p>
           </div>
           <button class="btn-primary" data-action="open-add-account" aria-label="Adicionar conta">+ Nova Conta</button>
+          <button class="btn-primary" style="background:var(--blue)" data-action="open-add-transfer" aria-label="Transferir entre contas">🔄 Transferir</button>
         </div>
 
         <div class="card"><div id="insight-accounts" class="insight-strip"></div></div>
@@ -346,12 +361,44 @@
           </div>
         </div>
 
+        <div class="card collapsible" id="transfer-form-wrap">
+          <div class="collapsible-header" data-toggle="transfer-form-body" aria-expanded="false" aria-controls="transfer-form-body" role="button" tabindex="0">
+            <span>🔄 Transferir entre contas</span><span class="collapsible-arrow">▶</span>
+          </div>
+          <div class="collapsible-body" id="transfer-form-body" hidden>
+            <div class="form-grid" role="form" aria-label="Formulário de transferência">
+              <div class="field-group">
+                <label for="tf-from" class="field-label">De (conta de origem)</label>
+                <select id="tf-from" class="input" aria-required="true"></select>
+              </div>
+              <div class="field-group">
+                <label for="tf-to" class="field-label">Para (conta de destino)</label>
+                <select id="tf-to" class="input" aria-required="true"></select>
+              </div>
+              <div class="field-group">
+                <label for="tf-amount" class="field-label">Valor (R$)</label>
+                <input id="tf-amount" class="input" type="number" placeholder="0,00" min="0.01" step="0.01" aria-required="true">
+              </div>
+              <div class="field-group">
+                <label for="tf-date" class="field-label">Data</label>
+                <input id="tf-date" class="input" type="date" aria-required="true">
+              </div>
+              <button class="btn-primary" data-action="add-transfer">Transferir</button>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="card-header"><span class="card-title">Saldo por Conta</span></div>
           <div class="chart-wrap chart-wrap--small"><canvas id="chart-accounts" aria-label="Gráfico de contas" role="img"></canvas></div>
         </div>
 
         <div id="accounts-list" class="accounts-grid" role="list" aria-label="Lista de contas"></div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-header"><span class="card-title">🔄 Transferências Recentes</span></div>
+          <div id="transfers-list" role="list" aria-label="Transferências"></div>
+        </div>
       </section>
 
       <!-- ====================================================
@@ -497,6 +544,14 @@
               <span class="toggle-track" aria-hidden="true"></span>
               <span>Recorrente mensal</span>
             </label>
+          </div>
+          <div class="field-group">
+            <label for="fab-installments" class="field-label">Parcelas</label>
+            <input id="fab-installments" class="input" type="number" placeholder="1" min="1" max="60" value="1">
+          </div>
+          <div class="field-group">
+            <label for="fab-installment-total" class="field-label">Total de parcelas</label>
+            <input id="fab-installment-total" class="input" type="number" placeholder="1" min="1" max="60" value="1">
           </div>
         </div>
       </div>

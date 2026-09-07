@@ -3,7 +3,8 @@
 const SHEET_ID = "1ABC123DEF456"; 
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzUQXQFTa9xfvA_5uDYUpRsjpbVtkTp7-_5AqY-h4QFvctcjff7kN5SICL4inQ5f_cuJg/exec";
 
-let hasLoadedFromSheets = false; // Controle: carregar SÓ UMA VEZ na abertura
+let hasLoadedFromSheets = false;
+let _lastPushHash = "";
 
 // ========== CARREGAR DO SHEETS NA ABERTURA ==========
 async function loadSheetDataOnce() {
@@ -83,19 +84,19 @@ async function refreshFromSheets() {
     const sheetData = await loadFromSheets();
     
     if (sheetData && Object.keys(sheetData).length > 0) {
-      // Mesclar: Sheets + localStorage (Sheets é a "verdade")
       mergeSheetData(sheetData);
       persist();
       console.log("✅ Dados atualizados do Sheets");
       updateSyncStatus("✅ Atualizado", true);
       
-      // Renderizar de novo
       renderOverview();
       renderAccounts();
       renderCalendar();
       renderCards();
       renderGoals();
       renderInvestments();
+    } else {
+      updateSyncStatus("✅ Atualizado", true);
     }
   } catch (error) {
     console.error("Erro ao atualizar:", error);
@@ -105,22 +106,57 @@ async function refreshFromSheets() {
 
 // ========== MESCLAR DADOS DO SHEETS ==========
 function mergeSheetData(sheetData) {
-  // Estratégia: Sheets é autoridade, mas manter dados locais mais recentes
-  if (sheetData.accounts) db.accounts = sheetData.accounts;
-  if (sheetData.cards) db.cards = sheetData.cards;
-  if (sheetData.calendar) db.calendar = sheetData.calendar;
-  if (sheetData.goals) db.goals = sheetData.goals;
-  if (sheetData.investments) db.investments = sheetData.investments;
-  if (sheetData.income) db.income = sheetData.income;
+  const arrayFields = ['accounts', 'cards', 'calendar', 'goals', 'investments'];
+
+  arrayFields.forEach(field => {
+    if (!sheetData[field]) return;
+    const sheetItems = sheetData[field];
+    const localItems = db[field] || [];
+
+    const localMap = new Map(localItems.map(item => [item.id, item]));
+    const merged = [];
+
+    sheetItems.forEach(sheetItem => {
+      const localItem = localMap.get(sheetItem.id);
+      if (localItem) {
+        const sheetTime = new Date(sheetItem.createdAt || 0).getTime();
+        const localTime = new Date(localItem.createdAt || 0).getTime();
+        merged.push(localTime >= sheetTime ? localItem : sheetItem);
+        localMap.delete(sheetItem.id);
+      } else {
+        merged.push(sheetItem);
+      }
+    });
+
+    localMap.forEach(item => merged.push(item));
+    db[field] = merged;
+  });
+
+  if (sheetData.income !== undefined) db.income = sheetData.income;
   if (sheetData.budget) db.budget = sheetData.budget;
 }
 
 // ========== SYNC AUTOMÁTICO (APENAS ENVIAR) ==========
+function getDataHash(data) {
+  try {
+    const str = JSON.stringify(data);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+    }
+    return String(hash);
+  } catch (_) { return ""; }
+}
+
 async function pushToSheets() {
   if (!SCRIPT_URL) return;
 
+  const currentHash = getDataHash(db);
+  if (currentHash === _lastPushHash) return;
+
   try {
     await saveToSheets(db);
+    _lastPushHash = currentHash;
     updateSyncStatus("✅ Sincronizado", true);
   } catch (error) {
     console.error("Erro no push automático:", error);
@@ -133,7 +169,12 @@ function updateSyncStatus(status, synced) {
   const badge = document.getElementById("sync-status");
   if (badge) {
     badge.textContent = status;
-    if (synced) {
+    badge.classList.remove('sync-badge--syncing');
+    if (status.includes('🔄')) {
+      badge.classList.add('sync-badge--syncing');
+      badge.style.borderColor = '';
+      badge.style.color = '';
+    } else if (synced) {
       badge.style.borderColor = "var(--green)";
       badge.style.color = "var(--green)";
     } else {
@@ -150,10 +191,10 @@ setInterval(() => {
 
 // ========== AUTO-PUSH AO SAIR DO DASHBOARD ==========
 window.addEventListener("beforeunload", () => {
+  persistFlush();
   if (SCRIPT_URL) {
-    navigator.sendBeacon(SCRIPT_URL, JSON.stringify({
-      action: "save",
-      data: db
-    }));
+    const payload = JSON.stringify({ action: "save", data: db });
+    const blob = new Blob([payload], { type: "application/json" });
+    navigator.sendBeacon(SCRIPT_URL, blob);
   }
 });
