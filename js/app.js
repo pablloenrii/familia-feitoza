@@ -93,6 +93,32 @@ function goTo(page) {
   document.getElementById('sidebar')?.classList.remove('open');
   document.getElementById('sidebar-overlay')?.classList.remove('show');
 
+  const skeletonMap = {
+    overview:    '<div class="kpi-grid"><div class="skeleton skeleton--kpi"></div><div class="skeleton skeleton--kpi"></div><div class="skeleton skeleton--kpi"></div><div class="skeleton skeleton--kpi"></div></div>',
+    cards:       '<div class="skeleton skeleton--card"></div>',
+    calendar:    '<div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div><div class="skeleton skeleton--row"></div>',
+    budget:      '<div class="skeleton skeleton--chart"></div>',
+    accounts:    '<div class="skeleton skeleton--card"></div>',
+    investments: '<div class="skeleton skeleton--card"></div>',
+    goals:       '<div class="skeleton skeleton--card"></div>',
+  };
+
+  const skeletonTargets = {
+    overview:    'overview-kpis',
+    cards:       'cards-list',
+    calendar:    'calendar-list',
+    budget:      null,
+    accounts:    'accounts-list',
+    investments: 'investments-list',
+    goals:       'goals-list',
+  };
+
+  const skelTarget = skeletonTargets[page];
+  if (skelTarget && skeletonMap[page]) {
+    const skelEl = document.getElementById(skelTarget);
+    if (skelEl) skelEl.innerHTML = skeletonMap[page];
+  }
+
   const renders = {
     overview:    renderOverview,
     cards:       () => { renderCards(); renderInsightCards(); },
@@ -166,10 +192,10 @@ function renderKPIs() {
   const maiorCat = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0];
 
   const kpis = [
+    { label: 'Saldo do Mês',            value: fmt(saldoMes),      icon: '💵', color: saldoMes >= 0 ? 'green' : 'red', sub: saldoMes >= 0 ? 'Positivo' : 'Negativo', hero: true },
+    { label: 'Patrimônio Líquido',      value: fmt(patrimonio),    icon: '🏛️', color: 'blue',   sub: 'Contas + Investimentos', hero: true },
     { label: 'Receitas do Mês',         value: fmt(totalReceitas), icon: '📥', color: 'green',  sub: 'Entradas' },
     { label: 'Despesas do Mês',         value: fmt(totalDespesas), icon: '📤', color: 'red',    sub: 'Saídas' },
-    { label: 'Saldo do Mês',            value: fmt(saldoMes),      icon: '💵', color: saldoMes >= 0 ? 'green' : 'red', sub: saldoMes >= 0 ? 'Positivo' : 'Negativo' },
-    { label: 'Patrimônio Líquido',      value: fmt(patrimonio),    icon: '🏛️', color: 'blue',   sub: 'Contas + Investimentos' },
     { label: 'Gasto Médio Diário',      value: fmt(gastoDiario),   icon: '📅', color: 'orange', sub: isCurrentMonth ? `Baseado em ${diasPassados} dias` : `Média do mês` },
     { label: isCurrentMonth ? 'Projeção Fim do Mês' : 'Total de Despesas', value: fmt(projecao), icon: '🔮', color: projecao > (db.income || 0) * 1.1 ? 'red' : 'green', sub: isCurrentMonth ? `Projeção para ${diasMes} dias` : MONTHS_PT[month] },
     { label: 'Renda Mensal',            value: fmt(db.income),     icon: '💼', color: 'purple', sub: 'Configurada no budget' },
@@ -179,7 +205,7 @@ function renderKPIs() {
   const el = document.getElementById('overview-kpis');
   if (!el) return;
   el.innerHTML = kpis.map(k => `
-    <div class="kpi-card kpi-card--${esc(k.color)}" role="figure" aria-label="${esc(k.label)}: ${esc(k.value)}" title="${esc(k.label)}: ${esc(k.value)} — ${esc(k.sub)}">
+    <div class="kpi-card kpi-card--${esc(k.color)} ${k.hero ? 'kpi-card--hero' : ''}" role="figure" aria-label="${esc(k.label)}: ${esc(k.value)}" title="${esc(k.label)}: ${esc(k.value)} — ${esc(k.sub)}">
       <div class="kpi-icon" aria-hidden="true">${k.icon}</div>
       <div class="kpi-body">
         <div class="kpi-label">${esc(k.label)}</div>
@@ -204,7 +230,7 @@ function renderUpcomingExpenses() {
     .slice(0, 6);
 
   if (!items.length) {
-    el.innerHTML = '<div class="empty-state"><span>📭</span><p>Nenhum vencimento nos próximos 14 dias</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--calendar"></div><p class="empty-title">Nenhum vencimento nos próximos 14 dias</p><p class="empty-desc">Adicione receitas ou despesas para acompanhar seus compromissos.</p></div>';
     return;
   }
   el.innerHTML = items.map(e => `
@@ -224,7 +250,7 @@ function renderOverviewGoals() {
   if (!el) return;
   const goals = db.goals.slice(0, 4);
   if (!goals.length) {
-    el.innerHTML = '<div class="empty-state"><span>🎯</span><p>Nenhuma meta cadastrada</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--goal"></div><p class="empty-title">Nenhuma meta cadastrada</p><p class="empty-desc">Defina metas de economia para alcançar seus objetivos.</p></div>';
     return;
   }
   el.innerHTML = goals.map(g => {
@@ -403,7 +429,7 @@ function renderCards() {
   const el = document.getElementById('cards-list');
   if (!el) return;
   if (!db.cards.length) {
-    el.innerHTML = '<div class="empty-state"><span>💳</span><p>Nenhum cartão cadastrado</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--card"></div><p class="empty-title">Nenhum cartão cadastrado</p><p class="empty-desc">Adicione seus cartões para controlar limites e gastos.</p></div>';
     return;
   }
   el.innerHTML = db.cards.map(c => {
@@ -411,6 +437,7 @@ function renderCards() {
     const statusClass = usedPct >= 80 ? 'danger' : usedPct >= 50 ? 'warning' : 'ok';
     return `
       <div class="card-item" role="listitem" aria-label="Cartão ${esc(c.name)}">
+        <div class="card-chip" aria-hidden="true"></div>
         <div class="card-item-header">
           <div>
             <div class="card-item-name">${esc(c.name)}</div>
@@ -548,7 +575,7 @@ function renderCalendar() {
   events.sort((a, b) => a.date.localeCompare(b.date));
 
   if (!events.length) {
-    el.innerHTML = '<div class="empty-state"><span>📭</span><p>Nenhum evento encontrado</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--calendar"></div><p class="empty-title">Nenhum evento encontrado</p><p class="empty-desc">Clique em "+" para adicionar sua primeira receita ou despesa.</p></div>';
     return;
   }
 
@@ -674,7 +701,7 @@ function renderAccounts() {
   const el = document.getElementById('accounts-list');
   if (!el) return;
   if (!db.accounts.length) {
-    el.innerHTML = '<div class="empty-state"><span>🏦</span><p>Nenhuma conta cadastrada</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--account"></div><p class="empty-title">Nenhuma conta cadastrada</p><p class="empty-desc">Comece cadastrando sua conta principal para controlar seu patrimônio.</p></div>';
     return;
   }
   el.innerHTML = db.accounts.map(a => `
@@ -782,7 +809,7 @@ function renderTransfers() {
   if (!el) return;
   const items = db.transfers.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
   if (!items.length) {
-    el.innerHTML = '<div class="empty-state"><span>🔄</span><p>Nenhuma transferência recente</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--transfer"></div><p class="empty-title">Nenhuma transferência recente</p><p class="empty-desc">Transfira valores entre suas contas para manter tudo organizado.</p></div>';
     return;
   }
   el.innerHTML = items.map(t => `
@@ -843,7 +870,7 @@ function renderInvestments() {
   const el = document.getElementById('investments-list');
   if (!el) return;
   if (!db.investments.length) {
-    el.innerHTML = '<div class="empty-state"><span>📈</span><p>Nenhum investimento cadastrado</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--investment"></div><p class="empty-title">Nenhum investimento cadastrado</p><p class="empty-desc">Registre seus investimentos para acompanhar a rentabilidade.</p></div>';
     return;
   }
   el.innerHTML = db.investments.map(inv => {
@@ -925,7 +952,7 @@ function renderGoals() {
   const el = document.getElementById('goals-list');
   if (!el) return;
   if (!db.goals.length) {
-    el.innerHTML = '<div class="empty-state"><span>🎯</span><p>Nenhuma meta cadastrada</p></div>';
+    el.innerHTML = '<div class="empty-state"><div class="empty-illustration empty-illustration--goal"></div><p class="empty-title">Nenhuma meta cadastrada</p><p class="empty-desc">Defina metas de economia para alcançar seus objetivos.</p></div>';
     return;
   }
   const today = todayStr();
@@ -1879,4 +1906,18 @@ function init() {
 document.addEventListener('DOMContentLoaded', () => {
   init();
   checkOnboarding();
+
+  const topbar = document.querySelector('.topbar');
+  if (topbar) {
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          topbar.classList.toggle('scrolled', window.scrollY > 10);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }, { passive: true });
+  }
 });
